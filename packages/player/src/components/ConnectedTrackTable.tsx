@@ -1,0 +1,69 @@
+import { FC } from 'react';
+
+import type { Track } from '@nuclearplayer/model';
+import {
+  TrackTable,
+  TrackTableActions,
+  TrackTableProps,
+} from '@nuclearplayer/ui';
+
+import { useQueueActions } from '../hooks/useQueueActions';
+import { useTrackActions } from '../hooks/useTrackActions';
+import { useTrackTableLabels } from '../hooks/useTrackTableLabels';
+import { playbackManager } from '../services/playback';
+import { useQueueStore } from '../stores/queueStore';
+import { getSetting } from '../stores/settingsStore';
+import { ConnectedTrackContextMenu } from './ConnectedTrackContextMenu';
+
+type ConnectedTrackTableProps = Omit<
+  TrackTableProps<Track>,
+  'actions' | 'meta' | 'labels'
+> & {
+  actions?: Pick<TrackTableActions<Track>, 'onRemove' | 'onReorder'>;
+};
+
+export const ConnectedTrackTable: FC<ConnectedTrackTableProps> = (props) => {
+  const { actions: externalActions, ...restProps } = props;
+  const trackActions = useTrackActions();
+  const queueActions = useQueueActions();
+  const labels = useTrackTableLabels();
+
+  return (
+    <TrackTable
+      {...restProps}
+      labels={labels}
+      display={{
+        displayFavorite: true,
+        ...restProps.display,
+      }}
+      actions={{
+        onAddToQueue: trackActions.addToQueue,
+        onPlayNow: (track: Track) => {
+          const allTracks = restProps.tracks;
+          const idx = Math.max(0, allTracks.indexOf(track));
+          queueActions.clearQueue();
+          queueActions.addToQueue(allTracks);
+          useQueueStore.getState().goToIndex(idx);
+          if (getSetting('core.playback.shuffle')) {
+            useQueueStore.getState().shuffleQueue(false);
+          }
+          playbackManager.play();
+        },
+        onPlayNext: trackActions.addNext,
+        onToggleFavorite: trackActions.toggleFavorite,
+        onRemove: externalActions?.onRemove,
+        onReorder: externalActions?.onReorder,
+        onPlayAll: () => {
+          queueActions.playTracks(restProps.tracks);
+        },
+        onAddAllToQueue: () => {
+          queueActions.addToQueue(restProps.tracks);
+        },
+      }}
+      meta={{
+        isTrackFavorite: trackActions.isFavorite,
+        ContextMenuWrapper: ConnectedTrackContextMenu,
+      }}
+    />
+  );
+};

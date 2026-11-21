@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome Nuclear 3-triangle logo for Android status bar / Now Bar / Dynamic Island -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Top triangle -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7.2,4.5 L16.8,4.5 L12,11.6 Z" />
+    <!-- Bottom-left triangle -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3.6,12.6 L11.4,12.6 L7.5,19.6 Z" />
+    <!-- Bottom-right triangle -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12.6,12.6 L20.4,12.6 L16.5,19.6 Z" />
+</vector>
