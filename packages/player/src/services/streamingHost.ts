@@ -20,7 +20,7 @@ export const hasActiveStreamingProvider = (): boolean =>
 
 export const isStreamExpired = (candidate: StreamCandidate): boolean => {
   if (!candidate.lastResolvedAtIso) {
-    return true;
+    return false;
   }
 
   const expiryMs =
@@ -97,7 +97,13 @@ export const createStreamingHost = (): StreamingHost => ({
   },
 
   resolveStreamForCandidate: async (candidate: StreamCandidate) => {
-    const provider = getActiveStreamingProvider();
+    const provider =
+      (candidate.source?.provider
+        ? providersHost.get<StreamingProvider>(
+            candidate.source.provider,
+            'streaming',
+          )
+        : undefined) ?? getActiveStreamingProvider();
 
     if (!provider) {
       Logger.streaming.warn('No provider for stream resolution');
@@ -146,3 +152,51 @@ export const createStreamingHost = (): StreamingHost => ({
 });
 
 export const streamingHost = createStreamingHost();
+
+/**
+ * Queries ALL installed streaming providers (e.g., YouTube, SoundCloud, Bandcamp, etc.)
+ * and returns a deduplicated list of every available stream candidate for the track.
+ */
+export const resolveAllProviderCandidates = async (
+  track: Track,
+): Promise<StreamCandidate[]> => {
+  const providers = providersHost.list('streaming') as StreamingProvider[];
+  if (providers.length === 0) {
+    return [];
+  }
+
+  const results = await Promise.allSettled(
+    providers.map(async (provider) => {
+      const list = provider.searchForTrackV2
+        ? await provider.searchForTrackV2(track)
+        : await provider.searchForTrack(
+            track.artists[0]?.name ?? 'Unknown Artist',
+            track.title,
+            track.album?.title,
+          );
+      return list.map((c) => ({
+        ...c,
+        source: c.source?.provider
+          ? c.source
+          : { provider: provider.id, id: c.id },
+      }));
+    }),
+  );
+
+  const seen = new Set<string>();
+  const merged: StreamCandidate[] = [];
+  for (const res of results) {
+    if (res.status !== 'fulfilled') {
+      continue;
+    }
+    for (const c of res.value) {
+      const key = `${c.source?.provider ?? 'default'}:${c.id}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      merged.push(c);
+    }
+  }
+  return merged;
+};

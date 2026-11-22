@@ -52,6 +52,7 @@ import { useP2pSyncStore } from '../services/p2pSync';
 import { playbackManager } from '../services/playback';
 import type { AmbientSpace } from '../services/soundSpaces';
 import { useSpotifyAccountSyncStore } from '../services/spotifyAccountSync';
+import { resolveAllProviderCandidates } from '../services/streamingHost';
 import {
   shareTrackVibeCard,
   shareWrappedCard,
@@ -68,7 +69,9 @@ import {
 import { usePlaylistStore } from '../stores/playlistStore';
 import { useQueueStore } from '../stores/queueStore';
 import { useSoundStore } from '../stores/soundStore';
+import { useUpdaterStore } from '../stores/updaterStore';
 import { BeatVisualizer } from './BeatVisualizer';
+import { FakeBankModal } from './FakeBankModal';
 import { P2pSyncPanel } from './P2pSyncPanel';
 
 const formatSeconds = (sec: number): string => {
@@ -187,9 +190,19 @@ export const MobileAndroidShell: FC = () => {
   const spotifySync = useSpotifyAccountSyncStore();
   const wrappedStats = useWrappedStatsStore();
   const p2pPeerAddress = useP2pSyncStore((s) => s.peerAddress);
+  const remoteState = useP2pSyncStore((s) => s.remoteState);
   const sendHandoffToPeer = useP2pSyncStore((s) => s.sendHandoffToPeer);
+  const pullHandoffFromPeer = useP2pSyncStore((s) => s.pullHandoffFromPeer);
+  const sendRemoteControl = useP2pSyncStore((s) => s.sendRemoteControl);
+  const isUpdateAvailable = useUpdaterStore((s) => s.isUpdateAvailable);
+  const updateInfo = useUpdaterStore((s) => s.updateInfo);
+  const isUpdateDownloading = useUpdaterStore((s) => s.isDownloading);
+  const downloadUpdate = useUpdaterStore((s) => s.downloadUpdate);
 
   const [offlineDrawerOpen, setOfflineDrawerOpen] = useState(false);
+  const [fakeBankOpen, setFakeBankOpen] = useState(false);
+  const [streamPickerOpen, setStreamPickerOpen] = useState(false);
+  const [searchingAllStreams, setSearchingAllStreams] = useState(false);
   const [hubTab, setHubTab] = useState<
     'offline' | 'spotify' | 'wrapped' | 'p2p'
   >('offline');
@@ -438,6 +451,81 @@ export const MobileAndroidShell: FC = () => {
           backgroundColor: oledBlackMode ? '#000000' : 'var(--muted)',
         }}
       >
+        {/* App Update Banner (when a newer release is published on GitHub) */}
+        {isUpdateAvailable && (
+          <div className="border-border/50 bg-primary/15 flex items-center justify-between gap-2 border-b px-3 py-1.5 text-xs">
+            <div className="min-w-0 flex-1 truncate font-bold">
+              ✨ Update v{updateInfo?.version ?? 'new'} available
+            </div>
+            <button
+              disabled={isUpdateDownloading}
+              onClick={() => {
+                haptic('medium');
+                void downloadUpdate();
+              }}
+              className="bg-primary text-primary-foreground flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold shadow transition active:scale-95 disabled:opacity-60"
+            >
+              <Download size={12} />
+              <span>{isUpdateDownloading ? 'Opening...' : 'Update'}</span>
+            </button>
+          </div>
+        )}
+        {/* Live PC Remote Control Bar (shows when PC is playing & phone is idle) */}
+        {remoteState?.isPlaying && !isPlaying && (
+          <div className="border-border/50 bg-emerald-500/15 flex items-center justify-between gap-2 border-b px-3 py-1.5 text-xs">
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-extrabold text-emerald-300">
+                💻 {remoteState.deviceName}: {remoteState.title || 'Playing'}
+              </div>
+              {remoteState.artist && (
+                <div className="truncate text-[10px] opacity-75">
+                  {remoteState.artist}
+                </div>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                onClick={() => {
+                  haptic('light');
+                  void sendRemoteControl('previous');
+                }}
+                className="flex size-7 items-center justify-center rounded-full bg-black/25 active:scale-90"
+                aria-label="PC Previous"
+              >
+                <SkipBack size={13} />
+              </button>
+              <button
+                onClick={() => {
+                  haptic('medium');
+                  void sendRemoteControl('toggle');
+                }}
+                className="flex size-7 items-center justify-center rounded-full bg-emerald-500 text-black active:scale-90"
+                aria-label="PC Play/Pause"
+              >
+                <Pause size={13} />
+              </button>
+              <button
+                onClick={() => {
+                  haptic('light');
+                  void sendRemoteControl('next');
+                }}
+                className="flex size-7 items-center justify-center rounded-full bg-black/25 active:scale-90"
+                aria-label="PC Next"
+              >
+                <SkipForward size={13} />
+              </button>
+              <button
+                onClick={() => {
+                  haptic('medium');
+                  void pullHandoffFromPeer(false);
+                }}
+                className="rounded-full bg-white/15 px-2 py-1 text-[10px] font-bold active:scale-95"
+              >
+                Here
+              </button>
+            </div>
+          </div>
+        )}
         {track && (
           <div
             className="relative flex cursor-pointer items-center gap-2.5 px-3 py-2 select-none"
@@ -677,15 +765,26 @@ export const MobileAndroidShell: FC = () => {
               <Sparkles size={19} />
               <span className="text-base font-extrabold">Nuclear Hub</span>
             </div>
-            <button
-              className="rounded-md border px-2.5 py-1 text-xs font-bold active:scale-95"
-              onClick={() => {
-                haptic('light');
-                setOfflineDrawerOpen(false);
-              }}
-            >
-              Close
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                className="rounded-md border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-xs font-bold text-amber-300 active:scale-95"
+                onClick={() => {
+                  haptic('light');
+                  setFakeBankOpen(true);
+                }}
+              >
+                🏦 Loans
+              </button>
+              <button
+                className="rounded-md border px-2.5 py-1 text-xs font-bold active:scale-95"
+                onClick={() => {
+                  haptic('light');
+                  setOfflineDrawerOpen(false);
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
 
           {/* 4-Tab Switcher: Offline | Spotify | Wrapped | P2P Sync */}
@@ -1296,8 +1395,19 @@ export const MobileAndroidShell: FC = () => {
                   <BeatVisualizer playing={isPlaying} color={dominantColor} />
                 )}
 
-                {/* Status Badges */}
+                {/* Status Badges + Switch Stream Button */}
                 <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-bold">
+                  {track && currentItem && (
+                    <button
+                      onClick={() => {
+                        haptic('light');
+                        setStreamPickerOpen(true);
+                      }}
+                      className="rounded-full border border-white/20 bg-black/35 px-2.5 py-0.5 text-white transition active:scale-95"
+                    >
+                      🔀 Switch Stream ({track.streamCandidates?.length ?? 0})
+                    </button>
+                  )}
                   {isTrackDownloaded && (
                     <span className="rounded-full bg-emerald-500/25 px-2.5 py-0.5 text-emerald-300">
                       ✓ Offline Ready
@@ -2198,6 +2308,152 @@ export const MobileAndroidShell: FC = () => {
           )}
         </div>
       )}
+
+      {/* Multi-Source Stream Switcher Sheet */}
+      {streamPickerOpen && track && currentItem && (
+        <div
+          className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60 backdrop-blur-xs"
+          onClick={() => setStreamPickerOpen(false)}
+        >
+          <div
+            className="animate-in slide-in-from-bottom-6 border-border flex max-h-[75dvh] flex-col rounded-t-2xl border-t pb-[max(1rem,env(safe-area-inset-bottom))] duration-200"
+            style={{
+              backgroundColor: oledBlackMode ? '#09090b' : 'var(--background)',
+              color: 'var(--foreground)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-border flex items-center justify-between border-b px-4 py-3">
+              <div className="min-w-0 flex-1 pr-2">
+                <div className="text-sm font-extrabold">
+                  🔀 Switch Audio Stream
+                </div>
+                <div className="truncate text-[11px] opacity-70">
+                  {track.title} — {artistName}
+                </div>
+              </div>
+              <button
+                onClick={() => setStreamPickerOpen(false)}
+                className="rounded-md border px-2.5 py-1 text-xs font-bold active:scale-95"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="px-4 pt-3">
+              <button
+                disabled={searchingAllStreams}
+                onClick={async () => {
+                  haptic('medium');
+                  setSearchingAllStreams(true);
+                  try {
+                    const all = await resolveAllProviderCandidates(track);
+                    if (all.length === 0) {
+                      toast.info('No additional streams found across sources');
+                    } else {
+                      const existing = track.streamCandidates ?? [];
+                      const seen = new Set(
+                        existing.map(
+                          (c) => `${c.source?.provider ?? 'default'}:${c.id}`,
+                        ),
+                      );
+                      const extras = all.filter(
+                        (c) =>
+                          !seen.has(
+                            `${c.source?.provider ?? 'default'}:${c.id}`,
+                          ),
+                      );
+                      const combined = [...existing, ...extras];
+                      useQueueStore.getState().updateItemState(currentItem.id, {
+                        track: { ...track, streamCandidates: combined },
+                      });
+                      toast.success(
+                        `Found ${combined.length} stream${combined.length === 1 ? '' : 's'} across sources`,
+                      );
+                    }
+                  } finally {
+                    setSearchingAllStreams(false);
+                  }
+                }}
+                className="bg-primary text-primary-foreground flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-extrabold shadow transition active:scale-95 disabled:opacity-60"
+              >
+                {searchingAllStreams ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <RefreshCw size={14} />
+                )}
+                <span>
+                  {searchingAllStreams
+                    ? 'Searching all streaming sources...'
+                    : 'Search All Streaming Sources'}
+                </span>
+              </button>
+            </div>
+
+            <div className="flex-1 space-y-1.5 overflow-y-auto p-4">
+              {(track.streamCandidates ?? []).length === 0 ? (
+                <div className="rounded-xl border border-dashed p-6 text-center text-xs opacity-70">
+                  No cached stream candidates yet. Tap{' '}
+                  <strong>Search All Streaming Sources</strong> above!
+                </div>
+              ) : (
+                (track.streamCandidates ?? []).map((cand, idx) => {
+                  const isActive = idx === 0 && !cand.failed;
+                  const providerLabel =
+                    cand.source?.provider?.replace(/^nuclear:/, '') || 'stream';
+                  return (
+                    <button
+                      key={`${cand.source?.provider ?? 'p'}-${cand.id}-${idx}`}
+                      onClick={() => {
+                        haptic('medium');
+                        useQueueStore
+                          .getState()
+                          .selectCandidate(currentItem.id, cand.id);
+                        playbackManager.play();
+                        setStreamPickerOpen(false);
+                        toast.success(
+                          `🔀 Switched stream: ${cand.title || cand.id}`,
+                        );
+                      }}
+                      className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left transition active:scale-[0.98] ${
+                        isActive
+                          ? 'bg-primary text-primary-foreground border-transparent font-bold shadow'
+                          : 'border-border bg-black/15'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-xs font-bold">
+                          {isActive ? '▶ ' : ''}
+                          {cand.title || cand.id}
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] opacity-75">
+                          <span className="rounded bg-black/25 px-1.5 py-0.5 font-mono uppercase">
+                            {providerLabel}
+                          </span>
+                          {cand.durationMs ? (
+                            <span className="font-mono">
+                              {formatSeconds(cand.durationMs / 1000)}
+                            </span>
+                          ) : null}
+                          {cand.failed && (
+                            <span className="text-rose-400">• Failed</span>
+                          )}
+                        </div>
+                      </div>
+                      {isActive && <Check size={16} className="shrink-0" />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <FakeBankModal
+        open={fakeBankOpen}
+        onClose={() => setFakeBankOpen(false)}
+      />
     </>
   );
 };

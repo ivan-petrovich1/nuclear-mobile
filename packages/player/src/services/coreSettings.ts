@@ -265,8 +265,7 @@ export const CORE_SETTINGS: SettingDefinition[] = [
     description: 'preferences.updates.checkForUpdates.description',
     category: 'updates',
     kind: 'boolean',
-    default: false,
-    hidden: true,
+    default: true,
     widget: { type: 'toggle' },
   },
   {
@@ -276,7 +275,6 @@ export const CORE_SETTINGS: SettingDefinition[] = [
     category: 'updates',
     kind: 'boolean',
     default: false,
-    hidden: true,
     widget: { type: 'toggle' },
   },
   {

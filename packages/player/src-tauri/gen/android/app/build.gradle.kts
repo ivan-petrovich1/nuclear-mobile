@@ -21,7 +21,8 @@ android {
         applicationId = "com.nuclearplayer"
         minSdk = 24
         targetSdk = 36
-        versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
+        val rawVersionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
+        versionCode = if (rawVersionCode < 2000000) rawVersionCode + 1000000 else rawVersionCode
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
     buildTypes {

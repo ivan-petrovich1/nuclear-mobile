@@ -157,6 +157,16 @@ class NuclearAndroidBridge(
   }
 
   @JavascriptInterface
+  fun openExternalUrl(url: String) {
+    try {
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      context.startActivity(intent)
+    } catch (_: Throwable) {}
+  }
+
+  @JavascriptInterface
   fun clearMediaSession() {
     NuclearMediaService.stop(context)
   }

@@ -42,6 +42,7 @@ declare global {
       ) => string;
       isIgnoringBatteryOptimizations?: () => boolean;
       requestIgnoreBatteryOptimizations?: () => void;
+      openExternalUrl?: (url: string) => void;
     };
     __NUCLEAR_MEDIA_ACTION__?: (action: string, positionMs: number) => void;
     __NUCLEAR_SHAKE_SKIP__?: () => void;

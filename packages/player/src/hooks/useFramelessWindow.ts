@@ -12,15 +12,15 @@ export const useFramelessWindow = () => {
       const window = getCurrentWindow();
 
       if (customTitleBar) {
-        window.setDecorations(false).catch(() => {});
+        Promise.resolve(window.setDecorations(false)).catch(() => {});
         // Removing decorations causes the window to become unminimizable
         // We need to explicitly add the attribute back
-        window.setMinimizable(true).catch(() => {});
+        Promise.resolve(window.setMinimizable(true)).catch(() => {});
       }
 
       if (!customTitleBar && frameless !== undefined) {
-        window.setDecorations(!frameless).catch(() => {});
-        window.setMinimizable(true).catch(() => {});
+        Promise.resolve(window.setDecorations(!frameless)).catch(() => {});
+        Promise.resolve(window.setMinimizable(true)).catch(() => {});
       }
     } catch {
       // Ignore on mobile WebView

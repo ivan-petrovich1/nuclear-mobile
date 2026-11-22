@@ -2,7 +2,7 @@
 
 exports[`FavoriteAlbums view > (Snapshot) renders empty state 1`] = `
 <main
-  class="surface-muted overflow-auto"
+  class="surface-muted min-w-0 max-w-full overflow-x-hidden overflow-y-auto"
   data-testid="player-workspace-main"
 >
   <div
@@ -95,7 +95,7 @@ exports[`FavoriteAlbums view > (Snapshot) renders empty state 1`] = `
 
 exports[`FavoriteAlbums view > (Snapshot) renders with albums 1`] = `
 <main
-  class="surface-muted overflow-auto"
+  class="surface-muted min-w-0 max-w-full overflow-x-hidden overflow-y-auto"
   data-testid="player-workspace-main"
 >
   <div

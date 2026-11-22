@@ -58,10 +58,16 @@ const getDirectionalIndex = (
   direction: 'forward' | 'backward',
 ): number => {
   const { items, currentIndex } = state;
+  const shuffleEnabled =
+    (getSetting('core.playback.shuffle') as boolean) ?? false;
   const repeatMode = (getSetting('core.playback.repeat') as string) ?? 'off';
 
   if (items.length === 0) {
     return currentIndex;
+  }
+
+  if (shuffleEnabled) {
+    return getShuffledIndex(items.length, currentIndex);
   }
 
   if (direction === 'forward') {
@@ -76,6 +82,19 @@ const getDirectionalIndex = (
   }
 
   return repeatMode === 'all' ? items.length - 1 : currentIndex;
+};
+
+const getShuffledIndex = (length: number, currentIndex: number): number => {
+  if (length <= 1) {
+    return currentIndex;
+  }
+
+  let nextIndex = currentIndex;
+  while (nextIndex === currentIndex) {
+    nextIndex = Math.floor(Math.random() * length);
+  }
+
+  return nextIndex;
 };
 
 const emitSkip = (): void => {

@@ -277,6 +277,42 @@ exports[`Themes view > (Snapshot) renders the themes view 1`] = `
                   <button
                     class="inline-flex cursor-pointer items-center rounded-md transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50 h-8 shrink-0 justify-start gap-2 px-2.5 py-1 text-xs whitespace-nowrap md:h-10 md:w-full md:px-4 md:py-2 md:text-sm"
                     data-headlessui-state=""
+                    data-testid="settings-navigation-item-p2p-sync"
+                    type="button"
+                  >
+                    <span>
+                      <svg
+                        aria-hidden="true"
+                        class="lucide lucide-link2 lucide-link-2"
+                        fill="none"
+                        height="24"
+                        stroke="currentColor"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        viewBox="0 0 24 24"
+                        width="24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M9 17H7A5 5 0 0 1 7 7h2"
+                        />
+                        <path
+                          d="M15 7h2a5 5 0 1 1 0 10h-2"
+                        />
+                        <line
+                          x1="8"
+                          x2="16"
+                          y1="12"
+                          y2="12"
+                        />
+                      </svg>
+                    </span>
+                    P2P Sync
+                  </button>
+                  <button
+                    class="inline-flex cursor-pointer items-center rounded-md transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50 h-8 shrink-0 justify-start gap-2 px-2.5 py-1 text-xs whitespace-nowrap md:h-10 md:w-full md:px-4 md:py-2 md:text-sm"
+                    data-headlessui-state=""
                     data-testid="settings-navigation-item-whats-new"
                     type="button"
                   >

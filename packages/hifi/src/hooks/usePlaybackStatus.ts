@@ -21,7 +21,12 @@ export const usePlaybackStatus = (
       return;
     }
 
+    const srcChanged = srcUrl !== activeSrcRef.current;
+
     const tryPlay = () => {
+      if (!isReadyToPlay(audio)) {
+        return;
+      }
       if (!audio.paused) {
         return;
       }
@@ -30,15 +35,15 @@ export const usePlaybackStatus = (
         if (err.name === 'AbortError' || err.name === 'NotSupportedError') {
           return;
         }
-        if (isReadyToPlay(audio)) {
-          onError?.(err);
-        }
+        onError?.(err);
       });
     };
 
     switch (status) {
       case 'playing': {
-        tryPlay();
+        if (!srcChanged) {
+          tryPlay();
+        }
         const onCanPlay = () => tryPlay();
         audio.addEventListener('canplay', onCanPlay);
         audio.addEventListener('loadeddata', onCanPlay);
