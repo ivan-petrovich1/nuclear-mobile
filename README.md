@@ -1,182 +1,76 @@
-<p align="center">
-  <picture>
-    <source alt="Nuclear Music Player"  srcset="packages/docs/.gitbook/assets/readme-banner.png">
-    <img alt="Nuclear Music Player"  srcset="packages/docs/.gitbook/assets/readme-banner.png">
-  </picture>
+# nuclear-mobile
 
+Android + desktop fork of [Nuclear](https://github.com/nukeop/nuclear) built on Tauri v2.
 
-</p>
-
-<div align="center">
-
-# Nuclear 
-
-</div>
-
-<div align="center">
-
-  Nuclear is a free, open-source music player without ads or tracking. Search for any song or artist, build playlists, and start listening.<br>
-  Runs on Windows, macOS, and Linux.
-  
-</div>
+Upstream Nuclear is desktop-only and relies on spawning a local `yt-dlp` binary, which doesn't work on Android out of the box. This fork replaces the extractor with a native Rust InnerTube/Piped resolver, adds a proper mobile UI shell, Android media session/widget support, WebAudio DSP controls, and local Wi-Fi P2P sync between desktop and phone.
 
 ## Screenshots
 
-<p align="center">
-  <img src="packages/docs/.gitbook/assets/dashboard-main.png" alt="Nuclear Music Player - Dashboard" width="100%">
-</p>
+### Android
 
-Nuclear comes with multiple built-in themes, with light and a dark modes:
+| Home | Now Playing | EQ & DSP | P2P Sync |
+|:---:|:---:|:---:|:---:|
+| ![Home](screenshots/android-home.jpg) | ![Now Playing](screenshots/android-player.jpg) | ![EQ & DSP](screenshots/android-dsp.jpg) | ![P2P Sync](screenshots/android-p2p.jpg) |
 
-<p align="center">
-  <img src="packages/docs/.gitbook/assets/dashboard-aurora-light.png" alt="Aurora theme, light mode" width="32%">
-  <img src="packages/docs/.gitbook/assets/dashboard-ember-light.png" alt="Ember theme, light mode" width="32%">
-  <img src="packages/docs/.gitbook/assets/dashboard-lagoon-light.png" alt="Lagoon theme, light mode" width="32%">
-</p>
-<p align="center">
-  <img src="packages/docs/.gitbook/assets/dashboard-default-dark.png" alt="Default theme, dark mode" width="32%">
-  <img src="packages/docs/.gitbook/assets/dashboard-lagoon-dark.png" alt="Lagoon theme, dark mode" width="32%">
-  <img src="packages/docs/.gitbook/assets/dashboard-arctic-moss-dark.png" alt="Arctic Moss theme, dark mode" width="32%">
-</p>
+### Desktop
 
-| | |
+| Dashboard | Synced Lyrics |
 |:---:|:---:|
-| ![Search artists](packages/docs/.gitbook/assets/search-artists.png) | ![Search albums](packages/docs/.gitbook/assets/search-albums.png) |
-| Artist search | Album search |
-| ![Search tracks](packages/docs/.gitbook/assets/search-tracks.png) | ![Artist page](packages/docs/.gitbook/assets/artist.png) |
-| Track search with recent searches | Artist page |
-| ![Album page](packages/docs/.gitbook/assets/album.png) | ![Favorite artists](packages/docs/.gitbook/assets/favorite-artists.png) |
-| Album page | Favorites |
-| ![Playlists](packages/docs/.gitbook/assets/playlists.png) | ![Playlist](packages/docs/.gitbook/assets/playlist-detail-view.png) |
-| Playlists | Playlist |
-| ![Synced lyrics](packages/docs/.gitbook/assets/lyrics.png) | ![Lyrics with furigana and translations](packages/docs/.gitbook/assets/lyrics-translations.png) |
-| Synced lyrics | Lyrics with furigana and translations |
-| ![Listening history](packages/docs/.gitbook/assets/history.png) | ![Listening stats](packages/docs/.gitbook/assets/history-stats.png) |
-| Listening history | Listening stats |
-| ![Stream sources](packages/docs/.gitbook/assets/stream-candidates.png) | ![Plugin store](packages/docs/.gitbook/assets/plugin-store.png) |
-| Stream sources for a queued track | Plugin store |
-| ![Installed plugins](packages/docs/.gitbook/assets/installed-plugins.png) | ![Preferences](packages/docs/.gitbook/assets/preferences.png) |
-| Installed plugins | Preferences |
-| ![What's new](packages/docs/.gitbook/assets/whats-new.png) | ![Log viewer](packages/docs/.gitbook/assets/log-viewer.png) |
-| What's new | Log viewer |
+| ![Dashboard](screenshots/desktop-dashboard.jpg) | ![Synced Lyrics](screenshots/desktop-lyrics.jpg) |
+| **Search** | **P2P Sync & Remote Control** |
+| ![Search](screenshots/desktop-search.jpg) | ![P2P Sync](screenshots/desktop-p2p.png) |
 
-Control Nuclear from your phone with Nuclear Jam:
+## What's different from upstream
 
-<p align="center">
-  <img src="packages/docs/.gitbook/assets/jam-remote.png" alt="Nuclear Jam remote control on a phone" width="300">
-</p>
+- **Works on Android without `yt-dlp`**: Stream resolution and search run directly in Rust (`ytdlp.rs`) using YouTube InnerTube clients (`VISIONOS`, `IOS`, `TVHTML5_SIMPLY_EMBEDDED_PLAYER`) with Piped API fallback and a local byte-range stream proxy so seeking doesn't break.
+- **Native Android integration**: Foreground `MediaSession` service (lock screen, notification shade, Bluetooth controls), home screen widget, shake-to-skip, haptics, and battery optimization prompt.
+- **Mobile UI (`MobileAndroidShell`)**: Bottom nav, swipeable mini-player, full-screen Now Playing drawer (Player / Lyrics / DSP / Queue), cover-art color extraction, and true `#000000` OLED dark mode.
+- **Audio DSP & effects**: 5-band EQ + presets, bass boost, loudness gain, 8D spatial panner, vocal reduction (karaoke), background soundscapes (rain, vinyl, cafe, campfire), playback speed/pitch, crossfade, silence trimming, and A-B looping.
+- **Playback QoL**: SponsorBlock segment skipping, next-track stream pre-resolving, offline track downloads (plus exporting to `Music/Nuclear` on Android), time-synced lyrics via LRCLIB, endless radio, and local listening stats / vibe card export.
+- **LAN P2P Sync**: Built-in Axum server (`p2p_sync.rs`, ports `37371-37380`) with 4-digit PIN pairing to merge playlists/favorites/stats over local Wi-Fi or hand off the active queue and timestamp between desktop and phone.
 
-## Download
+## Building
 
-Grab the latest release for your platform from the [Releases page](https://github.com/nukeop/nuclear/releases).
-
-| Platform | Formats |
-|----------|---------|
-| Windows | `.exe` installer, `.msi` |
-| macOS | `.dmg` (Apple Silicon and Intel) |
-| Linux | `.AppImage`, `.deb`, `.rpm`, `.flatpak` |
-
-## Features
-
-- Search for music and stream it from any source
-- Browse artist pages with biographies, discographies, and similar artists
-- Browse album pages with track listings
-- Queue management with shuffle, repeat, and drag-and-drop reordering
-- Favorites (albums, artists, and tracks)
-- Playlists (create, import, export, import from various services)
-- Powerful plugin system with a built-in plugin store
-- Themes (built-in and custom CSS themes)
-- MCP server lets your AI agent drive the player
-- Auto-updates
-- Keyboard shortcuts
-- Localized in multiple languages
-
-## Plugins
-
-Nuclear has a powerful plugin system now! Every functionality has been redesigned to be driven by plugins.
-
-Plugins can provide streaming sources, metadata, playlists, dashboard content, and more. Browse and install plugins from the built-in plugin store, or write your own using the [@nuclearplayer/plugin-sdk](https://www.npmjs.com/package/@nuclearplayer/plugin-sdk).
-
-## MCP
-
-You can enable the MCP server in Settings → Integrations.
-
-Then to add it to **Claude Code:**
+Requires Node >= 22, pnpm >= 9, and Rust (stable). For Android builds you also need Java 17+ and the Android SDK + NDK (`27.x`).
 
 ```bash
-claude mcp add nuclear --transport http http://127.0.0.1:8800/mcp
-```
-
-**Codex CLI:**
-
-```bash
-codex mcp add nuclear --url http://127.0.0.1:8800/mcp
-```
-
-**OpenCode:**
-
-```json
-{
-  "mcp": {
-    "nuclear": {
-      "type": "remote",
-      "url": "http://127.0.0.1:8800/mcp"
-    }
-  }
-}
-```
-
-**Claude Desktop / Cursor / Windsurf:**
-
-```json
-{
-  "mcpServers": {
-    "nuclear": {
-      "url": "http://127.0.0.1:8800/mcp"
-    }
-  }
-}
-```
-
-The MCP is designed to be discoverable, but there's a skill you can load to get your AI up to speed: [Nuclear MCP Skill](./packages/docs/.gitbook/assets/nuclear-mcp.zip)
-
-## Development
-
-Nuclear is a pnpm monorepo managed with Turborepo. The main app is built with Tauri (Rust + React).
-
-### Prerequisites
-
-- Node.js >= 22
-- pnpm >= 9
-- Rust (stable)
-- Platform-specific Tauri dependencies ([see Tauri docs](https://v2.tauri.app/start/prerequisites/))
-
-### Getting started
-
-```bash
-git clone https://github.com/nukeop/nuclear.git
-cd nuclear
+git clone https://github.com/ivan-petrovich1/nuclear-mobile.git
+cd nuclear-mobile
 pnpm install
+```
+
+### Desktop
+
+```bash
 pnpm dev
 ```
 
-### Useful commands
+### Android APK
+
+Make sure the Rust Android targets are installed:
 
 ```bash
-pnpm dev            # Run the player in dev mode
-pnpm dev:remote     # Same, but binds Vite to 0.0.0.0 so you can open the remote control UI from other devices on your LAN
-pnpm build          # Build all packages
-pnpm test           # Run all tests
-pnpm lint           # Lint all packages
-pnpm type-check     # TypeScript checks
-pnpm storybook      # Run Storybook
+rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
 ```
 
-## Community
+Build the APK:
 
-- [Discord](https://discord.gg/JqPjKxE)
-- [Mastodon](https://fosstodon.org/@nuclearplayer)
-- [Discussions](https://github.com/nukeop/nuclear/discussions)
+```bash
+pnpm --filter @nuclearplayer/player tauri android build --apk
+```
+
+The APK will be generated in:
+`packages/player/src-tauri/gen/android/app/build/outputs/apk/universal/release/`
+
+To install on a phone or Waydroid:
+
+```bash
+# ADB
+adb install -r packages/player/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+
+# Waydroid
+waydroid app install packages/player/src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk
+```
 
 ## License
 
