@@ -11,6 +11,7 @@ Get the latest packages from the [Releases page](https://github.com/ivan-petrovi
 - **Android (`arm64`):** `Nuclear-Mobile-Blank-arm64.apk`
 - **Linux (`x86_64` & `arm64`, glibc 2.35+):** `.AppImage` (portable), `.deb` (Ubuntu / Debian / Mint / Pop!_OS), `.rpm` (Fedora / openSUSE / Nobara)
 - **Windows (`x64`):** `Nuclear-Windows-x64-setup.exe` / `.msi`
+- **macOS (`Apple Silicon` & `Intel`):** `Nuclear-macOS-arm64.dmg` (M1–M4) / `Nuclear-macOS-x64.dmg` (Intel). Since builds are ad-hoc signed, if macOS Gatekeeper blocks first launch, run `xattr -cr /Applications/Nuclear.app` in Terminal.
 
 ## Screenshots
 

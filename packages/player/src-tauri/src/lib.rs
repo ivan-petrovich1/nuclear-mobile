@@ -47,6 +47,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::relaunch_appimage,
         commands::get_runtime_platform,
         commands::self_update_windows,
+        commands::self_update_macos,
         commands::sha256_file,
         http::http_fetch,
         ytdlp::ytdlp_search,

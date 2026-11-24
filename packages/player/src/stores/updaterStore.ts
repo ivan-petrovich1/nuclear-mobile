@@ -146,7 +146,9 @@ const checkGitHubReleaseFallback = async (): Promise<Update | null> => {
         ? 'android'
         : typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent)
           ? 'windows'
-          : 'linux',
+          : typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent)
+            ? 'macos'
+            : 'linux',
       arch: 'x86_64',
       package_type: isAndroid ? 'apk' : 'appimage',
     };
@@ -299,6 +301,19 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
               url,
             }).catch(() => false);
             if (launched === true) {
+              return;
+            }
+          } else if (lowerUrl.endsWith('.dmg')) {
+            unlisten = await listen<number>('appimage-update-progress', (e) => {
+              set({ downloadProgress: e.payload });
+            }).catch(() => undefined);
+            const opened = await invoke<boolean>('self_update_macos', {
+              url,
+            }).catch(() => false);
+            if (opened === true) {
+              toast.success(
+                `Downloaded Nuclear v${updateInfo.version} — drag Nuclear to Applications in the opened installer`,
+              );
               return;
             }
           } else if (lowerUrl.endsWith('.appimage')) {

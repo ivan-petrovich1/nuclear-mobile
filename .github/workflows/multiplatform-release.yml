@@ -9,6 +9,11 @@ on:
         description: "Release tag to upload assets to (e.g. v1.0.5)"
         required: true
         type: string
+      macos_only:
+        description: "Only build macOS packages (skip Linux & Windows)"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -31,7 +36,14 @@ jobs:
           - name: "Windows x64"
             runner: "windows-latest"
             kind: "windows-x64"
+          - name: "macOS Apple Silicon (arm64)"
+            runner: "macos-latest"
+            kind: "macos-arm64"
+          - name: "macOS Intel (x64)"
+            runner: "macos-latest"
+            kind: "macos-x64"
 
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.macos_only != true || startsWith(matrix.kind, 'macos-') }}
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
 
@@ -125,6 +137,24 @@ jobs:
           mkdir -p dist-assets
           cp packages/player/src-tauri/target/release/bundle/nsis/*-setup.exe dist-assets/Nuclear-Windows-x64-setup.exe
           cp packages/player/src-tauri/target/release/bundle/msi/*.msi dist-assets/Nuclear-Windows-x64.msi
+
+      - name: Build macOS Apple Silicon (.dmg)
+        if: matrix.kind == 'macos-arm64'
+        shell: bash
+        run: |
+          rustup target add aarch64-apple-darwin
+          pnpm --filter @nuclearplayer/player tauri build --bundles dmg --target aarch64-apple-darwin
+          mkdir -p dist-assets
+          cp packages/player/src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg dist-assets/Nuclear-macOS-arm64.dmg
+
+      - name: Build macOS Intel (.dmg)
+        if: matrix.kind == 'macos-x64'
+        shell: bash
+        run: |
+          rustup target add x86_64-apple-darwin
+          pnpm --filter @nuclearplayer/player tauri build --bundles dmg --target x86_64-apple-darwin
+          mkdir -p dist-assets
+          cp packages/player/src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg dist-assets/Nuclear-macOS-x64.dmg
 
       - name: Upload packages to GitHub Release
         shell: bash

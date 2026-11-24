@@ -564,6 +564,86 @@ pub async fn self_update_windows(app: tauri::AppHandle, url: String) -> Result<b
     }
 }
 
+#[command]
+#[specta::specta]
+pub async fn self_update_macos(app: tauri::AppHandle, url: String) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        use futures::StreamExt;
+        use std::time::Duration;
+        use tauri::Emitter;
+        use tokio::io::AsyncWriteExt;
+
+        let dmg_path = std::env::temp_dir().join("Nuclear-Update.dmg");
+        let tmp_path = std::env::temp_dir().join("Nuclear-Update.dmg.part");
+        let client = crate::net::http_client_builder()
+            .user_agent("Nuclear-Updater/1.0")
+            .timeout(Duration::from_secs(300))
+            .connect_timeout(Duration::from_secs(20))
+            .build()
+            .map_err(|e| e.to_string())?;
+
+        let download_res: Result<(), Box<dyn std::error::Error>> = async {
+            let resp = client.get(&url).send().await?;
+            if !resp.status().is_success() {
+                return Err(format!("HTTP error {}", resp.status()).into());
+            }
+            let content_len = resp.content_length();
+            let mut file = tokio::fs::File::create(&tmp_path).await?;
+            let mut stream = resp.bytes_stream();
+            let mut total_bytes: u64 = 0;
+            let mut last_pct: i32 = -1;
+
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk?;
+                total_bytes += chunk.len() as u64;
+                file.write_all(&chunk).await?;
+                if let Some(len) = content_len {
+                    if len > 0 {
+                        let pct = ((total_bytes * 100) / len).min(99) as i32;
+                        if last_pct < 0 || pct - last_pct >= 2 {
+                            last_pct = pct;
+                            let _ = app.emit("appimage-update-progress", pct as u32);
+                        }
+                    }
+                }
+            }
+            file.flush().await?;
+            drop(file);
+
+            if total_bytes <= 1_000_000 {
+                return Err(
+                    format!("Downloaded macOS image unexpectedly small ({total_bytes} bytes)")
+                        .into(),
+                );
+            }
+
+            let _ = fs::remove_file(&dmg_path);
+            fs::rename(&tmp_path, &dmg_path)?;
+            let _ = app.emit("appimage-update-progress", 100u32);
+            Ok(())
+        }
+        .await;
+
+        if let Err(err) = download_res {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(err.to_string());
+        }
+
+        std::process::Command::new("open")
+            .arg(&dmg_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        return Ok(true);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (app, url);
+        Ok(false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
