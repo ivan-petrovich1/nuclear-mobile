@@ -11,7 +11,7 @@ import { errorMessage } from '../utils/errorMessage';
 import { reportError } from '../utils/logging';
 import { getSetting } from './settingsStore';
 
-const CURRENT_RELEASE_VERSION = '1.0.5';
+const CURRENT_RELEASE_VERSION = '1.0.6';
 const GITHUB_LATEST_RELEASE_URL =
   'https://api.github.com/repos/ivan-petrovich1/nuclear-mobile/releases/latest';
 
@@ -138,20 +138,19 @@ const checkGitHubReleaseFallback = async (): Promise<Update | null> => {
   const isAndroid =
     typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const assets = release.assets ?? [];
-  const platform =
-    (await invoke<RuntimePlatformInfo>('get_runtime_platform').catch(
-      () => null,
-    )) ?? {
-      os: isAndroid
-        ? 'android'
-        : typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent)
-          ? 'windows'
-          : typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent)
-            ? 'macos'
-            : 'linux',
-      arch: 'x86_64',
-      package_type: isAndroid ? 'apk' : 'appimage',
-    };
+  const platform = (await invoke<RuntimePlatformInfo>(
+    'get_runtime_platform',
+  ).catch(() => null)) ?? {
+    os: isAndroid
+      ? 'android'
+      : typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent)
+        ? 'windows'
+        : typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent)
+          ? 'macos'
+          : 'linux',
+    arch: 'x86_64',
+    package_type: isAndroid ? 'apk' : 'appimage',
+  };
   const preferredAsset = pickBestReleaseAsset(assets, platform);
   const downloadUrl =
     preferredAsset?.browser_download_url ??
