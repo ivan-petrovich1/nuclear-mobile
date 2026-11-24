@@ -19,6 +19,7 @@ struct InnerPeerState {
     pin: String,
     device_name: String,
     snapshot_json: String,
+    playback_json: String,
 }
 
 #[derive(Clone)]
@@ -142,6 +143,64 @@ async fn handle_handoff(
     Ok((StatusCode::OK, "{\"ok\":true}".to_string()))
 }
 
+async fn verify_pin(
+    state: &P2pSyncState,
+    headers: &HeaderMap,
+) -> Result<(), (StatusCode, String)> {
+    let provided_pin = headers
+        .get("x-nuclear-pin")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let inner = state.inner.read().await;
+    if !inner.enabled {
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Peer sync is disabled on this device".to_string(),
+        ));
+    }
+    if inner.pin.is_empty() || inner.pin != provided_pin {
+        return Err((StatusCode::UNAUTHORIZED, "Invalid pairing PIN".to_string()));
+    }
+    Ok(())
+}
+
+async fn handle_state(
+    State(state): State<P2pSyncState>,
+    headers: HeaderMap,
+) -> Result<(StatusCode, String), (StatusCode, String)> {
+    verify_pin(&state, &headers).await?;
+    let inner = state.inner.read().await;
+    Ok((StatusCode::OK, inner.playback_json.clone()))
+}
+
+async fn handle_control(
+    State(state): State<P2pSyncState>,
+    headers: HeaderMap,
+    body: String,
+) -> Result<(StatusCode, String), (StatusCode, String)> {
+    verify_pin(&state, &headers).await?;
+    if serde_json::from_str::<Value>(&body).is_err() {
+        return Err((StatusCode::BAD_REQUEST, "Invalid control JSON".to_string()));
+    }
+    let _ = state.app.emit("p2p-remote-control", body);
+    Ok((StatusCode::OK, "{\"ok\":true}".to_string()))
+}
+
+async fn handle_pull_handoff(
+    State(state): State<P2pSyncState>,
+    headers: HeaderMap,
+) -> Result<(StatusCode, String), (StatusCode, String)> {
+    verify_pin(&state, &headers).await?;
+    let payload = {
+        let inner = state.inner.read().await;
+        inner.playback_json.clone()
+    };
+    let _ = state.app.emit("p2p-handoff-pause", "pull");
+    Ok((StatusCode::OK, payload))
+}
+
 pub fn init_p2p_sync(app: AppHandle) {
     let device_name = default_device_name();
     let inner = Arc::new(RwLock::new(InnerPeerState {
@@ -149,6 +208,7 @@ pub fn init_p2p_sync(app: AppHandle) {
         pin: "424242".to_string(),
         device_name,
         snapshot_json: "{}".to_string(),
+        playback_json: "{}".to_string(),
     }));
 
     let (tx, rx) = std::sync::mpsc::channel::<u16>();
@@ -180,6 +240,9 @@ pub fn init_p2p_sync(app: AppHandle) {
                 .route("/api/p2p/ping", get(handle_ping))
                 .route("/api/p2p/exchange", post(handle_exchange))
                 .route("/api/p2p/handoff", post(handle_handoff))
+                .route("/api/p2p/state", get(handle_state))
+                .route("/api/p2p/control", post(handle_control))
+                .route("/api/p2p/pull-handoff", post(handle_pull_handoff))
                 .with_state(router_state);
 
             let _ = axum::serve(listener, router).await;
@@ -229,5 +292,16 @@ pub async fn p2p_sync_update_snapshot(
 ) -> Result<(), String> {
     let mut inner = state.inner.write().await;
     inner.snapshot_json = snapshot_json;
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn p2p_sync_update_playback(
+    state: tauri::State<'_, P2pSyncState>,
+    playback_json: String,
+) -> Result<(), String> {
+    let mut inner = state.inner.write().await;
+    inner.playback_json = playback_json;
     Ok(())
 }

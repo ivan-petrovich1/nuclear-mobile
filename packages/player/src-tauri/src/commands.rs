@@ -281,8 +281,9 @@ pub async fn download_file(url: String, dest_path: PathBuf) -> Result<(), String
                 .collect();
 
             let public_dir = std::env::var("HOME")
+                .or_else(|_| std::env::var("USERPROFILE"))
                 .map(|h| PathBuf::from(h).join("Downloads").join("Nuclear"))
-                .unwrap_or_else(|_| PathBuf::from("/tmp/Nuclear"));
+                .unwrap_or_else(|_| std::env::temp_dir().join("Nuclear"));
 
             if fs::create_dir_all(&public_dir).is_ok() {
                 let public_file = public_dir.join(safe_name);
@@ -431,6 +432,134 @@ pub fn relaunch_appimage(app: tauri::AppHandle) -> Result<bool, String> {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = app;
+        Ok(false)
+    }
+}
+
+#[derive(serde::Serialize, specta::Type)]
+pub struct RuntimePlatformInfo {
+    pub os: String,
+    pub arch: String,
+    pub package_type: String,
+}
+
+#[command]
+#[specta::specta]
+pub fn get_runtime_platform() -> RuntimePlatformInfo {
+    let os = std::env::consts::OS.to_string();
+    let arch = std::env::consts::ARCH.to_string();
+    let package_type = if cfg!(target_os = "android") {
+        "apk".to_string()
+    } else if cfg!(target_os = "windows") {
+        "nsis".to_string()
+    } else if cfg!(target_os = "macos") {
+        "dmg".to_string()
+    } else if std::env::var("APPIMAGE")
+        .map(|v| !v.trim().is_empty())
+        .unwrap_or(false)
+    {
+        "appimage".to_string()
+    } else if Path::new("/etc/debian_version").exists() || Path::new("/usr/bin/dpkg").exists() {
+        "deb".to_string()
+    } else if Path::new("/etc/redhat-release").exists()
+        || Path::new("/etc/SuSE-release").exists()
+        || Path::new("/usr/bin/rpm").exists()
+    {
+        "rpm".to_string()
+    } else {
+        "appimage".to_string()
+    };
+
+    RuntimePlatformInfo {
+        os,
+        arch,
+        package_type,
+    }
+}
+
+#[command]
+#[specta::specta]
+pub async fn self_update_windows(app: tauri::AppHandle, url: String) -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use futures::StreamExt;
+        use std::time::Duration;
+        use tauri::Emitter;
+        use tokio::io::AsyncWriteExt;
+
+        let setup_path = std::env::temp_dir().join("Nuclear-Update-Setup.exe");
+        let tmp_path = std::env::temp_dir().join("Nuclear-Update-Setup.exe.part");
+        let client = crate::net::http_client_builder()
+            .user_agent("Nuclear-Updater/1.0")
+            .timeout(Duration::from_secs(300))
+            .connect_timeout(Duration::from_secs(20))
+            .build()
+            .map_err(|e| e.to_string())?;
+
+        let download_res: Result<(), Box<dyn std::error::Error>> = async {
+            let resp = client.get(&url).send().await?;
+            if !resp.status().is_success() {
+                return Err(format!("HTTP error {}", resp.status()).into());
+            }
+            let content_len = resp.content_length();
+            let mut file = tokio::fs::File::create(&tmp_path).await?;
+            let mut stream = resp.bytes_stream();
+            let mut total_bytes: u64 = 0;
+            let mut magic = [0u8; 2];
+            let mut magic_len = 0usize;
+            let mut last_pct: i32 = -1;
+
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk?;
+                if magic_len < 2 {
+                    let take = (2 - magic_len).min(chunk.len());
+                    magic[magic_len..magic_len + take].copy_from_slice(&chunk[..take]);
+                    magic_len += take;
+                }
+                total_bytes += chunk.len() as u64;
+                file.write_all(&chunk).await?;
+                if let Some(len) = content_len {
+                    if len > 0 {
+                        let pct = ((total_bytes * 100) / len).min(99) as i32;
+                        if last_pct < 0 || pct - last_pct >= 2 {
+                            last_pct = pct;
+                            let _ = app.emit("appimage-update-progress", pct as u32);
+                        }
+                    }
+                }
+            }
+            file.flush().await?;
+            drop(file);
+
+            if magic_len < 2 || &magic != b"MZ" {
+                return Err("Downloaded file is not a valid Windows executable".into());
+            }
+            if total_bytes <= 1_000_000 {
+                return Err(format!("Downloaded installer unexpectedly small ({total_bytes} bytes)").into());
+            }
+
+            let _ = fs::remove_file(&setup_path);
+            fs::rename(&tmp_path, &setup_path)?;
+            let _ = app.emit("appimage-update-progress", 100u32);
+            Ok(())
+        }
+        .await;
+
+        if let Err(err) = download_res {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(err.to_string());
+        }
+
+        std::process::Command::new(&setup_path)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        app.exit(0);
+        return Ok(true);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, url);
         Ok(false)
     }
 }

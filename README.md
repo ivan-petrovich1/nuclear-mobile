@@ -4,6 +4,14 @@ Android + desktop fork of [Nuclear](https://github.com/nukeop/nuclear) built on 
 
 Upstream Nuclear is desktop-only and relies on spawning a local `yt-dlp` binary, which doesn't work on Android out of the box. This fork replaces the extractor with a native Rust InnerTube/Piped resolver, adds a proper mobile UI shell, Android media session/widget support, WebAudio DSP controls, and local Wi-Fi P2P sync between desktop and phone.
 
+## Downloads
+
+Get the latest packages from the [Releases page](https://github.com/ivan-petrovich1/nuclear-mobile/releases/latest):
+
+- **Android (`arm64`):** `Nuclear-Mobile-Blank-arm64.apk`
+- **Linux (`x86_64` & `arm64`, glibc 2.35+):** `.AppImage` (portable), `.deb` (Ubuntu / Debian / Mint / Pop!_OS), `.rpm` (Fedora / openSUSE / Nobara)
+- **Windows (`x64`):** `Nuclear-Windows-x64-setup.exe` / `.msi`
+
 ## Screenshots
 
 ### Android

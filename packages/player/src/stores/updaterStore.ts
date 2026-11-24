@@ -11,7 +11,7 @@ import { errorMessage } from '../utils/errorMessage';
 import { reportError } from '../utils/logging';
 import { getSetting } from './settingsStore';
 
-const CURRENT_RELEASE_VERSION = '1.0.4';
+const CURRENT_RELEASE_VERSION = '1.0.5';
 const GITHUB_LATEST_RELEASE_URL =
   'https://api.github.com/repos/ivan-petrovich1/nuclear-mobile/releases/latest';
 
@@ -75,6 +75,52 @@ const openDownloadUrl = async (url: string): Promise<void> => {
   }
 };
 
+type RuntimePlatformInfo = {
+  os: string;
+  arch: string;
+  package_type: string;
+};
+
+const pickBestReleaseAsset = (
+  assets: GitHubReleaseAsset[],
+  platform: RuntimePlatformInfo,
+): GitHubReleaseAsset | undefined => {
+  const byExt = (ext: string, filterFn?: (lowerName: string) => boolean) =>
+    assets.find((asset) => {
+      const lower = (asset.name ?? '').toLowerCase();
+      return lower.endsWith(ext) && (filterFn ? filterFn(lower) : true);
+    });
+
+  if (platform.os === 'android') {
+    return byExt('.apk');
+  }
+
+  const isArm = platform.arch === 'aarch64' || platform.arch === 'arm64';
+  const matchesArch = (lowerName: string) =>
+    isArm ? /arm64|aarch64/.test(lowerName) : !/arm64|aarch64/.test(lowerName);
+
+  if (platform.os === 'windows') {
+    return (
+      byExt('.exe', matchesArch) ??
+      byExt('.msi', matchesArch) ??
+      byExt('.exe') ??
+      byExt('.msi')
+    );
+  }
+
+  if (platform.os === 'macos') {
+    return byExt('.dmg', matchesArch) ?? byExt('.dmg');
+  }
+
+  if (platform.package_type === 'deb') {
+    return byExt('.deb', matchesArch) ?? byExt('.appimage', matchesArch);
+  }
+  if (platform.package_type === 'rpm') {
+    return byExt('.rpm', matchesArch) ?? byExt('.appimage', matchesArch);
+  }
+  return byExt('.appimage', matchesArch);
+};
+
 const checkGitHubReleaseFallback = async (): Promise<Update | null> => {
   const response = await fetch(GITHUB_LATEST_RELEASE_URL, {
     headers: { Accept: 'application/vnd.github+json' },
@@ -92,10 +138,19 @@ const checkGitHubReleaseFallback = async (): Promise<Update | null> => {
   const isAndroid =
     typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const assets = release.assets ?? [];
-  const preferredAsset = assets.find((asset) => {
-    const name = (asset.name ?? '').toLowerCase();
-    return isAndroid ? name.endsWith('.apk') : name.endsWith('.appimage');
-  });
+  const platform =
+    (await invoke<RuntimePlatformInfo>('get_runtime_platform').catch(
+      () => null,
+    )) ?? {
+      os: isAndroid
+        ? 'android'
+        : typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent)
+          ? 'windows'
+          : 'linux',
+      arch: 'x86_64',
+      package_type: isAndroid ? 'apk' : 'appimage',
+    };
+  const preferredAsset = pickBestReleaseAsset(assets, platform);
   const downloadUrl =
     preferredAsset?.browser_download_url ??
     release.html_url ??
@@ -235,24 +290,37 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
       let unlisten: (() => void) | undefined;
       try {
         if (!isAndroid && url) {
-          unlisten = await listen<number>('appimage-update-progress', (e) => {
-            set({ downloadProgress: e.payload });
-          }).catch(() => undefined);
-          const updatedInPlace = await invoke<boolean>(
-            'self_update_appimage',
-            { url },
-          ).catch(() => false);
-          if (updatedInPlace === true) {
-            toast.success(
-              `Updated AppImage to v${updateInfo.version} — click Restart to apply`,
-            );
-            set({
-              isDownloading: false,
-              isInstalling: false,
-              isReadyToRestart: true,
-              downloadProgress: 100,
-            });
-            return;
+          const lowerUrl = url.toLowerCase();
+          if (lowerUrl.endsWith('.exe')) {
+            unlisten = await listen<number>('appimage-update-progress', (e) => {
+              set({ downloadProgress: e.payload });
+            }).catch(() => undefined);
+            const launched = await invoke<boolean>('self_update_windows', {
+              url,
+            }).catch(() => false);
+            if (launched === true) {
+              return;
+            }
+          } else if (lowerUrl.endsWith('.appimage')) {
+            unlisten = await listen<number>('appimage-update-progress', (e) => {
+              set({ downloadProgress: e.payload });
+            }).catch(() => undefined);
+            const updatedInPlace = await invoke<boolean>(
+              'self_update_appimage',
+              { url },
+            ).catch(() => false);
+            if (updatedInPlace === true) {
+              toast.success(
+                `Updated AppImage to v${updateInfo.version} — click Restart to apply`,
+              );
+              set({
+                isDownloading: false,
+                isInstalling: false,
+                isReadyToRestart: true,
+                downloadProgress: 100,
+              });
+              return;
+            }
           }
         }
         await updateInfo.downloadAndInstall();
