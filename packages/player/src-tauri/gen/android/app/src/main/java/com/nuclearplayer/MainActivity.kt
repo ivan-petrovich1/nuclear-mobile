@@ -28,11 +28,14 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.FileProvider
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlin.math.sqrt
 
 class NuclearAndroidBridge(
   private val context: Context,
   private val onShakeConfig: (Boolean, String) -> Unit,
+  private val onDownloadAndInstallApk: (String) -> Unit,
 ) {
   @JavascriptInterface
   fun isIgnoringBatteryOptimizations(): Boolean {
@@ -167,6 +170,11 @@ class NuclearAndroidBridge(
   }
 
   @JavascriptInterface
+  fun downloadAndInstallApk(apkUrl: String) {
+    onDownloadAndInstallApk(apkUrl)
+  }
+
+  @JavascriptInterface
   fun clearMediaSession() {
     NuclearMediaService.stop(context)
   }
@@ -254,6 +262,159 @@ class MainActivity : TauriActivity() {
   private var shakeEnabled = false
   private var shakeThresholdG = 2.6f
   private var lastShakeAtMs = 0L
+  @Volatile private var apkUpdating = false
+  @Volatile private var pendingUpdateApk: File? = null
+
+  private fun notifyUpdateProgress(pct: Int, status: String, message: String = "") {
+    val escaped = message
+      .replace("\\", "\\\\")
+      .replace("'", "\\'")
+      .replace("\n", " ")
+      .replace("\r", " ")
+    runOnUiThread {
+      appWebView?.evaluateJavascript(
+        "window.__NUCLEAR_UPDATE_PROGRESS__ && window.__NUCLEAR_UPDATE_PROGRESS__($pct, '$status', '$escaped')",
+        null,
+      )
+    }
+  }
+
+  private fun triggerApkInstaller(apkFile: File) {
+    try {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+        pendingUpdateApk = apkFile
+        notifyUpdateProgress(100, "permission", "Allow installing updates once, then return to Nuclear")
+        val settingsIntent = Intent(
+          Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+          Uri.parse("package:$packageName"),
+        ).apply {
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(settingsIntent)
+        return
+      }
+      pendingUpdateApk = null
+      val contentUri = FileProvider.getUriForFile(
+        this,
+        "$packageName.fileprovider",
+        apkFile,
+      )
+      val installIntent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(contentUri, "application/vnd.android.package-archive")
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+      }
+      startActivity(installIntent)
+      notifyUpdateProgress(100, "installing", "")
+    } catch (e: Throwable) {
+      notifyUpdateProgress(0, "error", e.message ?: "Failed to launch installer")
+    }
+  }
+
+  private fun startApkUpdateDownload(apkUrl: String) {
+    if (apkUpdating) return
+    apkUpdating = true
+    notifyUpdateProgress(0, "downloading", "")
+
+    Thread {
+      val updatesDir = File(cacheDir, "updates").apply { mkdirs() }
+      val partFile = File(updatesDir, "nuclear-update.apk.part")
+      val finalFile = File(updatesDir, "nuclear-update.apk")
+      try {
+        var currentUrl = apkUrl
+        var conn: HttpURLConnection? = null
+        for (hop in 0..6) {
+          val candidate = (URL(currentUrl).openConnection() as HttpURLConnection).apply {
+            instanceFollowRedirects = false
+            connectTimeout = 20_000
+            readTimeout = 60_000
+            setRequestProperty("User-Agent", "Nuclear-Android-Updater/1.0")
+          }
+          val code = candidate.responseCode
+          if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
+            val location = candidate.getHeaderField("Location")
+            candidate.disconnect()
+            if (location.isNullOrBlank()) {
+              throw IllegalStateException("Redirect without Location header (HTTP $code)")
+            }
+            currentUrl = URL(URL(currentUrl), location).toString()
+            continue
+          }
+          conn = candidate
+          break
+        }
+
+        val activeConn = conn ?: throw IllegalStateException("Too many HTTP redirects")
+        try {
+          val status = activeConn.responseCode
+          if (status !in 200..299) {
+            throw IllegalStateException("Download failed (HTTP $status)")
+          }
+
+          val contentLen = activeConn.contentLengthLong
+          val buffer = ByteArray(32 * 1024)
+          val magic = ByteArray(4)
+          var magicLen = 0
+          var totalBytes = 0L
+          var lastPct = -1
+
+          activeConn.inputStream.use { input ->
+            partFile.outputStream().use { out ->
+              while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                if (magicLen < 4) {
+                  val take = (4 - magicLen).coerceAtMost(read)
+                  System.arraycopy(buffer, 0, magic, magicLen, take)
+                  magicLen += take
+                }
+                out.write(buffer, 0, read)
+                totalBytes += read
+                if (contentLen > 0) {
+                  val pct = ((totalBytes * 100L) / contentLen).toInt().coerceIn(0, 99)
+                  if (lastPct < 0 || pct - lastPct >= 2) {
+                    lastPct = pct
+                    notifyUpdateProgress(pct, "downloading", "")
+                  }
+                }
+              }
+            }
+          }
+
+          if (
+            magicLen < 4 ||
+            magic[0] != 0x50.toByte() ||
+            magic[1] != 0x4B.toByte() ||
+            magic[2] != 0x03.toByte() ||
+            magic[3] != 0x04.toByte()
+          ) {
+            throw IllegalStateException("Downloaded file is not a valid APK")
+          }
+          if (totalBytes <= 5_000_000L) {
+            throw IllegalStateException("Downloaded APK is unexpectedly small ($totalBytes bytes)")
+          }
+
+          if (finalFile.exists()) {
+            finalFile.delete()
+          }
+          if (!partFile.renameTo(finalFile)) {
+            partFile.copyTo(finalFile, overwrite = true)
+            partFile.delete()
+          }
+        } finally {
+          activeConn.disconnect()
+        }
+
+        apkUpdating = false
+        runOnUiThread {
+          triggerApkInstaller(finalFile)
+        }
+      } catch (e: Throwable) {
+        partFile.delete()
+        apkUpdating = false
+        notifyUpdateProgress(0, "error", e.message ?: "Download failed")
+      }
+    }.start()
+  }
 
   private val shakeListener = object : SensorEventListener {
     override fun onSensorChanged(event: SensorEvent) {
@@ -338,9 +499,15 @@ class MainActivity : TauriActivity() {
     appWebView = webView
     webView.settings.mediaPlaybackRequiresUserGesture = false
     webView.addJavascriptInterface(
-      NuclearAndroidBridge(applicationContext) { enabled, sensitivity ->
-        updateShakeSensor(enabled, sensitivity)
-      },
+      NuclearAndroidBridge(
+        applicationContext,
+        onShakeConfig = { enabled, sensitivity ->
+          updateShakeSensor(enabled, sensitivity)
+        },
+        onDownloadAndInstallApk = { apkUrl ->
+          startApkUpdateDownload(apkUrl)
+        },
+      ),
       "NuclearAndroid",
     )
     NuclearMediaService.actionListener = { action, positionMs ->
@@ -349,6 +516,17 @@ class MainActivity : TauriActivity() {
           "window.__NUCLEAR_MEDIA_ACTION__ && window.__NUCLEAR_MEDIA_ACTION__('$action', $positionMs)",
           null,
         )
+      }
+    }
+  }
+
+  override fun onResume() {
+    super.onResume()
+    val pending = pendingUpdateApk
+    if (pending != null && pending.exists()) {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()) {
+        pendingUpdateApk = null
+        triggerApkInstaller(pending)
       }
     }
   }

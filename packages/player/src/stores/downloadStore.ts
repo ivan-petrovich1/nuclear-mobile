@@ -44,9 +44,15 @@ declare global {
       isIgnoringBatteryOptimizations?: () => boolean;
       requestIgnoreBatteryOptimizations?: () => void;
       openExternalUrl?: (url: string) => void;
+      downloadAndInstallApk?: (apkUrl: string) => void;
     };
     __NUCLEAR_MEDIA_ACTION__?: (action: string, positionMs: number) => void;
     __NUCLEAR_SHAKE_SKIP__?: () => void;
+    __NUCLEAR_UPDATE_PROGRESS__?: (
+      pct: number,
+      status: string,
+      message: string,
+    ) => void;
   }
 }
 

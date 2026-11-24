@@ -304,12 +304,13 @@ pub async fn download_file(url: String, dest_path: PathBuf) -> Result<(), String
 
 #[command]
 #[specta::specta]
-pub async fn self_update_appimage(url: String) -> Result<bool, String> {
+pub async fn self_update_appimage(app: tauri::AppHandle, url: String) -> Result<bool, String> {
     #[cfg(target_os = "linux")]
     {
         use futures::StreamExt;
         use std::os::unix::fs::PermissionsExt;
         use std::time::Duration;
+        use tauri::Emitter;
         use tokio::io::AsyncWriteExt;
 
         let Ok(appimage_str) = std::env::var("APPIMAGE") else {
@@ -338,11 +339,13 @@ pub async fn self_update_appimage(url: String) -> Result<bool, String> {
                 return Err(format!("HTTP error {}", resp.status()).into());
             }
 
+            let content_len = resp.content_length();
             let mut file = tokio::fs::File::create(&tmp_path).await?;
             let mut stream = resp.bytes_stream();
             let mut total_bytes: u64 = 0;
             let mut magic = [0u8; 4];
             let mut magic_len = 0usize;
+            let mut last_pct: i32 = -1;
 
             while let Some(chunk) = stream.next().await {
                 let chunk = chunk?;
@@ -353,6 +356,15 @@ pub async fn self_update_appimage(url: String) -> Result<bool, String> {
                 }
                 total_bytes += chunk.len() as u64;
                 file.write_all(&chunk).await?;
+                if let Some(len) = content_len {
+                    if len > 0 {
+                        let pct = ((total_bytes * 100) / len).min(99) as i32;
+                        if last_pct < 0 || pct - last_pct >= 2 {
+                            last_pct = pct;
+                            let _ = app.emit("appimage-update-progress", pct as u32);
+                        }
+                    }
+                }
             }
             file.flush().await?;
             drop(file);
@@ -366,6 +378,7 @@ pub async fn self_update_appimage(url: String) -> Result<bool, String> {
 
             fs::set_permissions(&tmp_path, fs::Permissions::from_mode(0o755))?;
             fs::rename(&tmp_path, &appimage_path)?;
+            let _ = app.emit("appimage-update-progress", 100u32);
             Ok(())
         }
         .await;
@@ -381,7 +394,7 @@ pub async fn self_update_appimage(url: String) -> Result<bool, String> {
 
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = url;
+        let _ = (app, url);
         Ok(false)
     }
 }

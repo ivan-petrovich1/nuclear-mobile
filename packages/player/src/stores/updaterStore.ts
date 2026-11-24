@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
@@ -10,7 +11,7 @@ import { errorMessage } from '../utils/errorMessage';
 import { reportError } from '../utils/logging';
 import { getSetting } from './settingsStore';
 
-const CURRENT_RELEASE_VERSION = '1.0.3';
+const CURRENT_RELEASE_VERSION = '1.0.4';
 const GITHUB_LATEST_RELEASE_URL =
   'https://api.github.com/repos/ivan-petrovich1/nuclear-mobile/releases/latest';
 
@@ -215,12 +216,28 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
 
     set({ isDownloading: true, downloadProgress: 0, error: null });
     if (externalFallbackUpdates.has(updateInfo)) {
+      const isAndroid =
+        typeof navigator !== 'undefined' &&
+        /Android/i.test(navigator.userAgent);
+      const url = externalFallbackUrls.get(updateInfo);
+
+      if (isAndroid && url && window.NuclearAndroid?.downloadAndInstallApk) {
+        try {
+          window.NuclearAndroid.downloadAndInstallApk(url);
+        } catch (error) {
+          const message = errorMessage(error);
+          Logger.updates.error(`Failed to start APK update: ${message}`);
+          set({ isDownloading: false, isInstalling: false, error: message });
+        }
+        return;
+      }
+
+      let unlisten: (() => void) | undefined;
       try {
-        const isAndroid =
-          typeof navigator !== 'undefined' &&
-          /Android/i.test(navigator.userAgent);
-        const url = externalFallbackUrls.get(updateInfo);
         if (!isAndroid && url) {
+          unlisten = await listen<number>('appimage-update-progress', (e) => {
+            set({ downloadProgress: e.payload });
+          }).catch(() => undefined);
           const updatedInPlace = await invoke<boolean>(
             'self_update_appimage',
             { url },
@@ -244,6 +261,7 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
         Logger.updates.error(`Failed to open update download: ${message}`);
         set({ error: message });
       } finally {
+        unlisten?.();
         set({ isDownloading: false, isInstalling: false });
       }
       return;
@@ -299,3 +317,33 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
     }
   },
 }));
+
+if (typeof window !== 'undefined') {
+  window.__NUCLEAR_UPDATE_PROGRESS__ = (
+    pct: number,
+    status: string,
+    message: string,
+  ) => {
+    if (status === 'downloading') {
+      useUpdaterStore.setState({
+        isDownloading: true,
+        downloadProgress: pct,
+        error: null,
+      });
+    } else if (status === 'permission') {
+      toast.info(
+        message || 'Allow installing updates once, then return to Nuclear',
+      );
+      useUpdaterStore.setState({ isDownloading: false, downloadProgress: 100 });
+    } else if (status === 'installing') {
+      toast.success('Installing update...');
+      useUpdaterStore.setState({ isDownloading: false, downloadProgress: 100 });
+    } else if (status === 'error') {
+      toast.error(`Update failed: ${message || 'Download error'}`);
+      useUpdaterStore.setState({
+        isDownloading: false,
+        error: message || 'Download failed',
+      });
+    }
+  };
+}

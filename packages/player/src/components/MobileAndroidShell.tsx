@@ -201,6 +201,7 @@ export const MobileAndroidShell: FC = () => {
   const isUpdateAvailable = useUpdaterStore((s) => s.isUpdateAvailable);
   const updateInfo = useUpdaterStore((s) => s.updateInfo);
   const isUpdateDownloading = useUpdaterStore((s) => s.isDownloading);
+  const updateProgress = useUpdaterStore((s) => s.downloadProgress);
   const downloadUpdate = useUpdaterStore((s) => s.downloadUpdate);
 
   const [offlineDrawerOpen, setOfflineDrawerOpen] = useState(false);
@@ -470,7 +471,11 @@ export const MobileAndroidShell: FC = () => {
               className="bg-primary text-primary-foreground flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-extrabold shadow transition active:scale-95 disabled:opacity-60"
             >
               <Download size={12} />
-              <span>{isUpdateDownloading ? 'Opening...' : 'Update'}</span>
+              <span>
+                {isUpdateDownloading
+                  ? `Downloading ${updateProgress}%...`
+                  : 'Install Update'}
+              </span>
             </button>
           </div>
         )}
