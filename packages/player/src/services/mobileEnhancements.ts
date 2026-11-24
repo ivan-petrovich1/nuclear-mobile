@@ -6,6 +6,7 @@ import { pickArtwork, type Track } from '@nuclearplayer/model';
 
 import { useDownloadStore } from '../stores/downloadStore';
 import { useQueueStore } from '../stores/queueStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useSoundStore } from '../stores/soundStore';
 import { haptic, initAndroidMediaBridge } from './androidMediaBridge';
 import { triggerEndlessRadio } from './endlessRadio';
@@ -140,8 +141,12 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
       setSponsorBlockEnabled: (sponsorBlockEnabled) =>
         set({ sponsorBlockEnabled }),
       setPreResolveEnabled: (preResolveEnabled) => set({ preResolveEnabled }),
-      setSmartAutoCacheEnabled: (smartAutoCacheEnabled) =>
-        set({ smartAutoCacheEnabled }),
+      setSmartAutoCacheEnabled: (smartAutoCacheEnabled) => {
+        set({ smartAutoCacheEnabled });
+        void useSettingsStore
+          .getState()
+          .setValue('core.playback.autoDownloadPlayed', smartAutoCacheEnabled);
+      },
       setPlaybackSpeed: (playbackSpeed) => set({ playbackSpeed }),
       setPreservePitch: (preservePitch) => set({ preservePitch }),
       setBassBoostDb: (bassBoostDb) => set({ bassBoostDb }),
@@ -204,6 +209,13 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
     }),
     {
       name: 'nuclear-mobile-enhancements',
+      version: 2,
+      migrate: (persistedState: unknown) => ({
+        ...(typeof persistedState === 'object' && persistedState !== null
+          ? (persistedState as Record<string, unknown>)
+          : {}),
+        smartAutoCacheEnabled: false,
+      }),
       partialize: (state) => ({
         oledBlackMode: state.oledBlackMode,
         sponsorBlockEnabled: state.sponsorBlockEnabled,
@@ -458,6 +470,7 @@ type DspGraph = {
   bassFilter: BiquadFilterNode;
   eqFilters: BiquadFilterNode[];
   loudnessGain: GainNode;
+  masterVolumeGain: GainNode;
   panner: StereoPannerNode | null;
   lfoGain: GainNode | null;
   normalGain: GainNode;
@@ -469,6 +482,9 @@ const dspGraphs = new WeakMap<HTMLAudioElement, DspGraph>();
 let activeAnalyser: AnalyserNode | null = null;
 
 export const getAudioAnalyser = (): AnalyserNode | null => activeAnalyser;
+
+const isAndroidDevice = () =>
+  typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
 const syncAudioElementDsp = () => {
   const audio = document.querySelector('audio');
@@ -484,7 +500,6 @@ const syncAudioElementDsp = () => {
     eqBands,
     spatial8dEnabled,
     karaokeEnabled,
-    visualizerEnabled,
     silenceTrimEnabled,
   } = useMobileEnhancementsStore.getState();
 
@@ -506,12 +521,15 @@ const syncAudioElementDsp = () => {
     // Ignore speed errors
   }
 
+  // Only attach Web Audio when an explicit DSP effect is active.
+  // Keeping <audio> off Web Audio by default preserves Android's native hardware audio path
+  // (instant track starts, full loudness, and zero resampling distortion).
+  // BeatVisualizer automatically renders a smooth animated wave when no AudioContext is attached.
   const needsGraph =
     bassBoostDb > 0 ||
     loudnessBoostDb > 0 ||
     spatial8dEnabled ||
     karaokeEnabled ||
-    visualizerEnabled ||
     silenceTrimEnabled ||
     eqBands.some((gain) => Math.abs(gain) > 0.1);
 
@@ -543,6 +561,21 @@ const syncAudioElementDsp = () => {
       });
 
       const loudnessGain = ctx.createGain();
+      const masterVolumeGain = ctx.createGain();
+      // On Android Chromium, HTMLAudioElement.volume already scales pre-WebAudio output;
+      // mirroring it again would square volume (v^2) and halve max loudness!
+      // Only mirror audio.volume into masterVolumeGain on Desktop (WebKitGTK).
+      const syncVol = () => {
+        if (isAndroidDevice()) {
+          masterVolumeGain.gain.value = 1;
+          return;
+        }
+        const targetVol = audio.muted ? 0 : Math.max(0, Math.min(1, audio.volume));
+        masterVolumeGain.gain.setTargetAtTime(targetVol, ctx.currentTime, 0.02);
+      };
+      syncVol();
+      audio.addEventListener('volumechange', syncVol);
+
       let panner: StereoPannerNode | null = null;
       let lfoGain: GainNode | null = null;
 
@@ -594,8 +627,9 @@ const syncAudioElementDsp = () => {
       analyser.fftSize = 128;
       analyser.smoothingTimeConstant = 0.78;
 
-      normalGain.connect(analyser);
-      karaokeGain.connect(analyser);
+      normalGain.connect(masterVolumeGain);
+      karaokeGain.connect(masterVolumeGain);
+      masterVolumeGain.connect(analyser);
       analyser.connect(ctx.destination);
 
       graph = {
@@ -603,6 +637,7 @@ const syncAudioElementDsp = () => {
         bassFilter,
         eqFilters,
         loudnessGain,
+        masterVolumeGain,
         panner,
         lfoGain,
         normalGain,
@@ -627,6 +662,16 @@ const syncAudioElementDsp = () => {
     });
     // Convert dB to linear gain
     graph.loudnessGain.gain.value = Math.pow(10, loudnessBoostDb / 20);
+    if (isAndroidDevice()) {
+      graph.masterVolumeGain.gain.value = 1;
+    } else {
+      const targetVol = audio.muted ? 0 : Math.max(0, Math.min(1, audio.volume));
+      graph.masterVolumeGain.gain.setTargetAtTime(
+        targetVol,
+        graph.ctx.currentTime,
+        0.02,
+      );
+    }
     graph.normalGain.gain.setTargetAtTime(
       karaokeEnabled ? 0 : 1,
       graph.ctx.currentTime,
@@ -747,7 +792,10 @@ export const initMobileEnhancements = () => {
       void fetchLyricsForTrack(currentItem.track);
       syncMediaSessionMetadata(currentItem.track);
 
-      if (useMobileEnhancementsStore.getState().smartAutoCacheEnabled) {
+      const autoDownloadEnabled = Boolean(
+        useSettingsStore.getState().getValue('core.playback.autoDownloadPlayed'),
+      );
+      if (autoDownloadEnabled) {
         void useDownloadStore
           .getState()
           .downloadTrack(currentItem.track, true);
@@ -771,6 +819,7 @@ export const initMobileEnhancements = () => {
   onQueueChanged();
 
   let lastCrossfadeTrackId = '';
+  let crossfadeModifiedVol = false;
   let lastSilenceSkipAt = 0;
 
   useSoundStore.subscribe((soundState) => {
@@ -785,32 +834,51 @@ export const initMobileEnhancements = () => {
       silenceTrimEnabled,
     } = useMobileEnhancementsStore.getState();
 
-    // DJ Auto-Crossfade (smooth fade-out at end + fade-in at start)
+    // DJ Auto-Crossfade (scales relative to the user's actual volume setting)
     const audio =
       typeof document !== 'undefined' ? document.querySelector('audio') : null;
-    if (
-      audio &&
-      crossfadeSeconds > 0 &&
-      soundState.status === 'playing' &&
-      soundState.duration > 20
-    ) {
-      const remaining = soundState.duration - soundState.seek;
-      const curItem = useQueueStore.getState().getCurrentItem();
-      const qState = useQueueStore.getState();
-      const hasNext = qState.currentIndex < qState.items.length - 1;
+    if (audio) {
+      const baseVol = Math.max(
+        0,
+        Math.min(
+          1,
+          Number(
+            useSettingsStore.getState().getValue('core.playback.volume') ?? 1,
+          ),
+        ),
+      );
+      if (
+        crossfadeSeconds > 0 &&
+        soundState.status === 'playing' &&
+        soundState.duration > 20
+      ) {
+        const remaining = soundState.duration - soundState.seek;
+        const curItem = useQueueStore.getState().getCurrentItem();
+        const qState = useQueueStore.getState();
+        const hasNext = qState.currentIndex < qState.items.length - 1;
 
-      if (hasNext && remaining > 0 && remaining <= crossfadeSeconds) {
-        const ratio = Math.max(0.06, remaining / crossfadeSeconds);
-        audio.volume = Math.min(1, ratio);
-        if (remaining <= 0.7 && curItem && curItem.id !== lastCrossfadeTrackId) {
-          lastCrossfadeTrackId = curItem.id;
-          qState.goToNext();
+        if (hasNext && remaining > 0 && remaining <= crossfadeSeconds) {
+          const ratio = Math.max(0.08, remaining / crossfadeSeconds);
+          audio.volume = baseVol * ratio;
+          crossfadeModifiedVol = true;
+          if (
+            remaining <= 0.65 &&
+            curItem &&
+            curItem.id !== lastCrossfadeTrackId
+          ) {
+            lastCrossfadeTrackId = curItem.id;
+            qState.goToNext();
+          }
+        } else if (soundState.seek < 2.0 && crossfadeModifiedVol) {
+          const fadeIn = Math.min(1, Math.max(0.25, soundState.seek / 2.0));
+          audio.volume = baseVol * fadeIn;
+        } else if (crossfadeModifiedVol) {
+          audio.volume = baseVol;
+          crossfadeModifiedVol = false;
         }
-      } else if (soundState.seek < 2.2) {
-        const fadeIn = Math.min(1, Math.max(0.2, soundState.seek / 2.2));
-        audio.volume = fadeIn;
-      } else if (audio.volume < 0.99) {
-        audio.volume = 1;
+      } else if (crossfadeModifiedVol) {
+        audio.volume = baseVol;
+        crossfadeModifiedVol = false;
       }
     }
 

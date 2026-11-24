@@ -1,130 +1,32 @@
-import { act } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
+import { usePersonalizedFeedStore } from '../../services/personalizedFeed';
+import { useWrappedStatsStore } from '../../services/wrappedStats';
+import { useFavoritesStore } from '../../stores/favoritesStore';
+import { usePlaylistStore } from '../../stores/playlistStore';
 import { useStartupStore } from '../../stores/startupStore';
-import { DashboardProviderBuilder } from '../../test/builders/DashboardProviderBuilder';
-import { PlaylistProviderBuilder } from '../../test/builders/PlaylistProviderBuilder';
-import { TOP_TRACKS_RADIOHEAD } from '../../test/fixtures/dashboard';
 import { DashboardWrapper } from './Dashboard.test-wrapper';
 
-describe('Dashboard view', () => {
+describe('Dashboard view (100% Personalized)', () => {
   beforeEach(() => {
     DashboardWrapper.reset();
+    useWrappedStatsStore.getState().resetStats();
+    usePersonalizedFeedStore.getState().clearFeed();
+    useFavoritesStore.setState({
+      tracks: [],
+      albums: [],
+      artists: [],
+      loaded: true,
+    });
+    usePlaylistStore.setState({
+      index: [],
+      playlists: new Map(),
+      loaded: true,
+    });
   });
 
-  it('shows empty state when no providers are registered', async () => {
-    await DashboardWrapper.mount();
-
-    expect(DashboardWrapper.emptyState).toBeInTheDocument();
-    expect(DashboardWrapper.emptyStateAction.element).toBeInTheDocument();
-    expect(DashboardWrapper.topTracks.table).not.toBeInTheDocument();
-  });
-
-  it('opens the plugin store when clicking the empty state action', async () => {
-    await DashboardWrapper.mount();
-
-    await DashboardWrapper.emptyStateAction.click();
-
-    expect(await DashboardWrapper.settingsDialog()).toBeInTheDocument();
-    expect(await DashboardWrapper.pluginsHeading()).toBeInTheDocument();
-  });
-
-  it('renders tracks in a table when a provider supplies top tracks', async () => {
-    DashboardWrapper.seedProvider(
-      DashboardWrapper.fixtures.topTracksProvider(),
-    );
-
-    await DashboardWrapper.mount();
-
-    expect(DashboardWrapper.emptyState).not.toBeInTheDocument();
-    expect(DashboardWrapper.topTracks.heading).toBeInTheDocument();
-    expect(
-      await DashboardWrapper.topTracks.findTrack(
-        'Everything In Its Right Place',
-      ),
-    ).toBeInTheDocument();
-    expect(
-      await DashboardWrapper.topTracks.findTrack('Idioteque'),
-    ).toBeInTheDocument();
-  });
-
-  it('renders both tracks and artists when provider has both capabilities', async () => {
-    DashboardWrapper.seedProvider(
-      DashboardWrapper.fixtures.topTracksAndArtistsProvider(),
-    );
-
-    await DashboardWrapper.mount();
-
-    expect(DashboardWrapper.topTracks.heading).toBeInTheDocument();
-    expect(
-      await DashboardWrapper.topTracks.findTrack(
-        'Everything In Its Right Place',
-      ),
-    ).toBeInTheDocument();
-
-    expect(DashboardWrapper.topArtists.heading).toBeInTheDocument();
-    expect(
-      await DashboardWrapper.topArtists.artist('Radiohead').find(),
-    ).toBeInTheDocument();
-    expect(
-      await DashboardWrapper.topArtists.artist('Björk').find(),
-    ).toBeInTheDocument();
-  });
-
-  it('renders album cards when a provider supplies top albums', async () => {
-    DashboardWrapper.seedProvider(
-      DashboardWrapper.fixtures.topAlbumsProvider(),
-    );
-
-    await DashboardWrapper.mount();
-
-    expect(
-      await DashboardWrapper.topAlbums.album('Kid A').find(),
-    ).toBeInTheDocument();
-    expect(DashboardWrapper.topAlbums.heading).toBeInTheDocument();
-  });
-
-  it('renders playlist cards when a provider supplies editorial playlists', async () => {
-    DashboardWrapper.seedProvider(
-      DashboardWrapper.fixtures.editorialPlaylistsProvider(),
-    );
-
-    await DashboardWrapper.mount();
-
-    expect(
-      await DashboardWrapper.editorialPlaylists
-        .playlist('Art Rock Essentials')
-        .find(),
-    ).toBeInTheDocument();
-    expect(DashboardWrapper.editorialPlaylists.heading).toBeInTheDocument();
-  });
-
-  it('renders release cards when a provider supplies new releases', async () => {
-    DashboardWrapper.seedProvider(
-      DashboardWrapper.fixtures.newReleasesProvider(),
-    );
-
-    await DashboardWrapper.mount();
-
-    expect(
-      await DashboardWrapper.newReleases.release('In Rainbows').find(),
-    ).toBeInTheDocument();
-    expect(DashboardWrapper.newReleases.heading).toBeInTheDocument();
-  });
-
-  it('navigates to search when clicking an artist card without metadataProviderId', async () => {
-    DashboardWrapper.seedProvider(
-      DashboardWrapper.fixtures.topArtistsProviderWithoutMetadata(),
-    );
-
-    const { router } = await DashboardWrapper.mount();
-
-    await DashboardWrapper.topArtists.artist('Radiohead').click();
-
-    expect(router.state.location.pathname).toBe('/search');
-    expect(router.state.location.search).toEqual({ q: 'Radiohead' });
-  });
-
-  it('shows a skeleton during startup instead of the empty state', async () => {
+  it('shows a skeleton during startup instead of personalized content', async () => {
     act(() => {
       useStartupStore.getState().startStartup();
     });
@@ -132,87 +34,143 @@ describe('Dashboard view', () => {
     await DashboardWrapper.mount();
 
     expect(DashboardWrapper.skeleton).toBeInTheDocument();
-    expect(DashboardWrapper.emptyState).not.toBeInTheDocument();
-  });
-
-  it('shows widgets when a provider registers after initial mount', async () => {
-    await DashboardWrapper.mount();
-    expect(DashboardWrapper.emptyState).toBeInTheDocument();
-
-    DashboardWrapper.simulateStartupWithProvider(
-      DashboardWrapper.fixtures.topTracksProvider(),
-    );
-
-    expect(DashboardWrapper.emptyState).not.toBeInTheDocument();
-    expect(DashboardWrapper.topTracks.heading).toBeInTheDocument();
     expect(
-      await DashboardWrapper.topTracks.findTrack(
-        'Everything In Its Right Place',
-      ),
-    ).toBeInTheDocument();
+      screen.queryByTestId('personalized-empty-state'),
+    ).not.toBeInTheDocument();
   });
 
-  it('navigates to playlist import when clicking a playlist card with a matching provider', async () => {
-    DashboardWrapper.seedProvider(
-      DashboardWrapper.fixtures.editorialPlaylistsWithUrlProvider(),
-    );
-    DashboardWrapper.seedPlaylistProvider(
-      new PlaylistProviderBuilder().thatMatchesUrl('music.example.com'),
-    );
-
+  it('shows personalized empty state with no listening history and navigates to search', async () => {
     const { router } = await DashboardWrapper.mount();
 
-    await DashboardWrapper.editorialPlaylists
-      .playlist('Art Rock Essentials')
-      .click();
+    expect(screen.getByTestId('personalized-empty-state')).toBeInTheDocument();
+    expect(
+      screen.getByText('Start listening to build your feed'),
+    ).toBeInTheDocument();
 
-    expect(router.state.location.pathname).toBe(
-      '/playlists/import/test-playlist-provider',
+    await userEvent.click(screen.getByTestId('personalized-empty-search'));
+    expect(router.state.location.pathname).toBe('/search');
+  });
+
+  it('never renders generic global chart widgets even when a dashboard provider is registered', async () => {
+    DashboardWrapper.seedProvider(
+      DashboardWrapper.fixtures.topTracksAndArtistsProvider(),
     );
-    expect(router.state.location.search).toEqual({
-      url: encodeURIComponent('https://music.example.com/playlist/12345'),
+    DashboardWrapper.seedProvider(
+      DashboardWrapper.fixtures.newReleasesProvider(),
+    );
+    DashboardWrapper.seedProvider(
+      DashboardWrapper.fixtures.topAlbumsProvider(),
+    );
+    DashboardWrapper.seedProvider(
+      DashboardWrapper.fixtures.editorialPlaylistsProvider(),
+    );
+
+    await DashboardWrapper.mount();
+
+    expect(DashboardWrapper.topTracks.table).not.toBeInTheDocument();
+    expect(DashboardWrapper.newReleases.heading).not.toBeInTheDocument();
+    expect(DashboardWrapper.topAlbums.heading).not.toBeInTheDocument();
+    expect(DashboardWrapper.editorialPlaylists.heading).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId('dashboard-top-artists'),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId('personalized-empty-state')).toBeInTheDocument();
+  });
+
+  it('renders personalized shelves when wrapped stats and personalized feed are populated', async () => {
+    useWrappedStatsStore.setState({
+      totalSeconds: 1200,
+      totalPlays: 6,
+      artistStats: {
+        'molchat doma': { name: 'Molchat Doma', plays: 6, seconds: 1200 },
+      },
+      trackStats: {
+        'sudno::molchat doma': {
+          key: 'sudno::molchat doma',
+          title: 'Sudno',
+          artist: 'Molchat Doma',
+          plays: 6,
+          seconds: 1200,
+        },
+      },
     });
-  });
 
-  it('stays on dashboard when clicking a playlist card with no matching provider', async () => {
-    DashboardWrapper.seedProvider(
-      DashboardWrapper.fixtures.editorialPlaylistsWithUrlProvider(),
-    );
+    const recTrack = {
+      title: 'Zakaz',
+      artists: [
+        {
+          name: 'Ploho',
+          roles: [],
+          source: { provider: 'deezer-rec', id: 'ploho' },
+        },
+      ],
+      source: { provider: 'deezer-rec', id: 'deezer:2' },
+    };
 
-    const { router } = await DashboardWrapper.mount();
-
-    await DashboardWrapper.editorialPlaylists
-      .playlist('Art Rock Essentials')
-      .click();
-
-    expect(router.state.location.pathname).toBe('/dashboard');
-  });
-
-  it('shows tracks from multiple providers', async () => {
-    DashboardWrapper.seedProvider(
-      new DashboardProviderBuilder()
-        .withId('provider-a')
-        .withName('Soundwave')
-        .withCapabilities('topTracks')
-        .withFetchTopTracks(async () => [TOP_TRACKS_RADIOHEAD[0]]),
-    );
-    DashboardWrapper.seedProvider(
-      new DashboardProviderBuilder()
-        .withId('provider-b')
-        .withName('Wavelength')
-        .withCapabilities('topTracks')
-        .withFetchTopTracks(async () => [TOP_TRACKS_RADIOHEAD[1]]),
-    );
+    usePersonalizedFeedStore.setState({
+      feed: {
+        seedArtists: ['Molchat Doma'],
+        recommendedTracks: [
+          {
+            track: recTrack,
+            reason: 'Inspired by Molchat Doma',
+            seedArtist: 'Molchat Doma',
+          },
+        ],
+        artistShelves: [
+          {
+            seedArtist: 'Molchat Doma',
+            tracks: [recTrack],
+          },
+        ],
+        similarArtists: [
+          {
+            id: '123',
+            name: 'Ploho',
+            reason: 'Similar to Molchat Doma',
+          },
+        ],
+        albums: [
+          {
+            id: '501',
+            title: 'Belaya Polosa',
+            artistName: 'Molchat Doma',
+            releaseDate: '2024-09-06',
+          },
+        ],
+        mixes: [
+          {
+            id: '901',
+            title: '100% Molchat Doma',
+            trackCount: 25,
+            seedArtist: 'Molchat Doma',
+          },
+        ],
+        updatedAtMs: Date.now(),
+      },
+      lastSignature: 'molchat doma',
+      loading: false,
+    });
 
     await DashboardWrapper.mount();
 
     expect(
-      await DashboardWrapper.topTracks.findTrack(
-        'Everything In Its Right Place',
-      ),
+      screen.getByRole('heading', { name: 'Recommended for You' }),
     ).toBeInTheDocument();
     expect(
-      await DashboardWrapper.topTracks.findTrack('Idioteque'),
+      screen.getByRole('heading', { name: 'Because You Listen to Molchat Doma' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Similar Artists' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Albums & Releases' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Mixes for You' }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Jump Back In' }),
     ).toBeInTheDocument();
   });
 });

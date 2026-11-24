@@ -12,11 +12,13 @@ import type {
   PlaylistItem,
   Track,
 } from '@nuclearplayer/model';
+import { pickArtwork } from '@nuclearplayer/model';
 import type { FavoriteEntry } from '@nuclearplayer/plugin-sdk';
 
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { useQueueStore } from '../stores/queueStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { useSoundStore } from '../stores/soundStore';
 import { httpHost } from './httpHost';
 import { useMobileEnhancementsStore } from './mobileEnhancements';
@@ -48,13 +50,37 @@ type SyncSnapshot = {
   wrappedActiveDays: string[];
 };
 
+export type RemotePlaybackState = {
+  deviceName: string;
+  isPlaying: boolean;
+  title: string;
+  artist: string;
+  coverUrl?: string;
+  seek: number;
+  duration: number;
+  volume: number;
+  tracks?: Track[];
+  currentIndex?: number;
+};
+
+export type RemoteControlAction =
+  | 'play'
+  | 'pause'
+  | 'toggle'
+  | 'next'
+  | 'previous'
+  | 'seek'
+  | 'volume';
+
 type P2pSyncStoreState = {
   enabled: boolean;
   pin: string;
   peerAddress: string; // e.g. "192.168.1.42:37371" or "192.168.1.42:37371|424242"
   autoSyncOnLaunch: boolean;
+  seamlessHandoff: boolean;
   syncing: boolean;
   localInfo: P2pPeerInfo | null;
+  remoteState: RemotePlaybackState | null;
   lastSyncedIso: string | null;
   lastSummary: string | null;
   deletedPlaylists: Record<string, string>;
@@ -63,11 +89,16 @@ type P2pSyncStoreState = {
   setPin: (pin: string) => void;
   setPeerAddress: (addr: string) => void;
   setAutoSyncOnLaunch: (enabled: boolean) => void;
+  setSeamlessHandoff: (enabled: boolean) => void;
   recordPlaylistDeletion: (playlistId: string) => void;
   refreshLocalInfo: () => Promise<void>;
   pushLocalSnapshotToRust: () => Promise<SyncSnapshot>;
+  pushLocalPlaybackToRust: () => Promise<void>;
+  pollRemoteState: () => Promise<RemotePlaybackState | null>;
   syncWithPeer: (silent?: boolean) => Promise<void>;
-  sendHandoffToPeer: () => Promise<void>;
+  sendHandoffToPeer: (silent?: boolean) => Promise<void>;
+  pullHandoffFromPeer: (silent?: boolean) => Promise<void>;
+  sendRemoteControl: (action: RemoteControlAction, value?: number) => Promise<void>;
 };
 
 const flattenPlaylistIds = (nodes: PlaylistIndexNode[]): string[] => {
@@ -310,8 +341,10 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
       pin: String(Math.floor(100000 + Math.random() * 900000)),
       peerAddress: '',
       autoSyncOnLaunch: true,
+      seamlessHandoff: true,
       syncing: false,
       localInfo: null,
+      remoteState: null,
       lastSyncedIso: null,
       lastSummary: null,
       deletedPlaylists: {},
@@ -333,6 +366,7 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
 
       setPeerAddress: (peerAddress) => set({ peerAddress }),
       setAutoSyncOnLaunch: (autoSyncOnLaunch) => set({ autoSyncOnLaunch }),
+      setSeamlessHandoff: (seamlessHandoff) => set({ seamlessHandoff }),
 
       recordPlaylistDeletion: (playlistId) =>
         set((s) => ({
@@ -365,6 +399,156 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
           // ignore outside Tauri
         }
         return snap;
+      },
+
+      pushLocalPlaybackToRust: async () => {
+        const queue = useQueueStore.getState();
+        const cur = queue.getCurrentItem();
+        const sound = useSoundStore.getState();
+        const start = Math.max(0, queue.currentIndex - 5);
+        const tracks = queue.items.slice(start, start + 35).map((i) => i.track);
+        const relIndex = Math.max(0, queue.currentIndex - start);
+        const coverUrl = cur?.track
+          ? (pickArtwork(cur.track.artwork, 'thumbnail', 256)?.url ??
+            pickArtwork(cur.track.album?.artwork, 'thumbnail', 256)?.url)
+          : undefined;
+        const vol =
+          (useSettingsStore
+            .getState()
+            .getValue('core.playback.volume') as number) ?? 1;
+
+        const payload: RemotePlaybackState = {
+          deviceName: get().localInfo?.deviceName ?? 'Nuclear Peer',
+          isPlaying: sound.status === 'playing',
+          title: cur?.track.title ?? '',
+          artist:
+            cur?.track.artists?.map((a) => a.name).join(', ') || '',
+          coverUrl,
+          seek: sound.seek,
+          duration: sound.duration,
+          volume: vol,
+          tracks,
+          currentIndex: relIndex,
+        };
+        try {
+          await invoke('p2p_sync_update_playback', {
+            playbackJson: JSON.stringify(payload),
+          });
+        } catch {
+          // ignore outside Tauri
+        }
+      },
+
+      pollRemoteState: async () => {
+        const target = parsePeerTarget(get().peerAddress, get().pin);
+        if (!target) {
+          if (get().remoteState !== null) {
+            set({ remoteState: null });
+          }
+          return null;
+        }
+        const stateUrl = target.url.replace(/\/exchange$/, '/state');
+        try {
+          const res = await httpHost.fetch(stateUrl, {
+            method: 'GET',
+            headers: { 'x-nuclear-pin': target.pin },
+          });
+          if (res.status < 200 || res.status >= 300) {
+            set({ remoteState: null });
+            return null;
+          }
+          const parsed = JSON.parse(res.body) as RemotePlaybackState;
+          if (!parsed || typeof parsed.deviceName !== 'string') {
+            set({ remoteState: null });
+            return null;
+          }
+          set({ remoteState: parsed });
+          return parsed;
+        } catch {
+          set({ remoteState: null });
+          return null;
+        }
+      },
+
+      sendRemoteControl: async (action, value) => {
+        const target = parsePeerTarget(get().peerAddress, get().pin);
+        if (!target) {
+          toast.error('Link your other device in P2P Sync first!');
+          return;
+        }
+        const controlUrl = target.url.replace(/\/exchange$/, '/control');
+        try {
+          const res = await httpHost.fetch(controlUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-nuclear-pin': target.pin,
+            },
+            body: JSON.stringify({ action, value }),
+          });
+          if (res.status >= 200 && res.status < 300) {
+            window.setTimeout(() => {
+              void get().pollRemoteState();
+            }, 350);
+          }
+        } catch {
+          toast.error('Could not reach paired device');
+        }
+      },
+
+      pullHandoffFromPeer: async (silent = false) => {
+        const target = parsePeerTarget(get().peerAddress, get().pin);
+        if (!target) {
+          if (!silent) {
+            toast.error('Link your other device in P2P Sync first!');
+          }
+          return;
+        }
+        const pullUrl = target.url.replace(/\/exchange$/, '/pull-handoff');
+        try {
+          const res = await httpHost.fetch(pullUrl, {
+            method: 'POST',
+            headers: { 'x-nuclear-pin': target.pin },
+          });
+          if (res.status < 200 || res.status >= 300) {
+            throw new Error(`HTTP ${res.status}`);
+          }
+          const remote = JSON.parse(res.body) as RemotePlaybackState;
+          if (!remote.tracks || remote.tracks.length === 0) {
+            if (!silent) {
+              toast.info('Nothing playing on your other device');
+            }
+            return;
+          }
+          const q = useQueueStore.getState();
+          q.clearQueue();
+          q.addToQueue(remote.tracks);
+          const idx = Math.max(
+            0,
+            Math.min(remote.tracks.length - 1, remote.currentIndex ?? 0),
+          );
+          q.goToIndex(idx);
+          playbackManager.play();
+          if (typeof remote.seek === 'number' && remote.seek > 1) {
+            window.setTimeout(() => {
+              useSoundStore.getState().seekTo(remote.seek);
+            }, 1600);
+          }
+          set((s) => ({
+            remoteState: s.remoteState
+              ? { ...s.remoteState, isPlaying: false }
+              : null,
+          }));
+          if (!silent) {
+            toast.success(`🎧 Switched playback here: ${remote.title || 'Queue'}`);
+          }
+        } catch (err) {
+          if (!silent) {
+            toast.error(
+              `Switch failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
       },
 
       syncWithPeer: async (silent = false) => {
@@ -420,16 +604,20 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
         }
       },
 
-      sendHandoffToPeer: async () => {
+      sendHandoffToPeer: async (silent = false) => {
         const target = parsePeerTarget(get().peerAddress, get().pin);
         if (!target) {
-          toast.error('Link your other device in P2P Sync first!');
+          if (!silent) {
+            toast.error('Link your other device in P2P Sync first!');
+          }
           return;
         }
         const queue = useQueueStore.getState();
         const cur = queue.getCurrentItem();
         if (!cur) {
-          toast.info('Play a track first to hand off!');
+          if (!silent) {
+            toast.info('Play a track first to hand off!');
+          }
           return;
         }
         const sound = useSoundStore.getState();
@@ -456,11 +644,18 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
             throw new Error(`Peer returned HTTP ${res.status}`);
           }
           playbackManager.pause();
-          toast.success(`🚀 Handed off "${cur.track.title}" to your other device!`);
+          window.setTimeout(() => {
+            void get().pollRemoteState();
+          }, 500);
+          if (!silent) {
+            toast.success(`🚀 Playing on your other device: "${cur.track.title}"`);
+          }
         } catch (err) {
-          toast.error(
-            `Handoff failed: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          if (!silent) {
+            toast.error(
+              `Handoff failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
         }
       },
     }),
@@ -471,6 +666,7 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
         pin: s.pin,
         peerAddress: s.peerAddress,
         autoSyncOnLaunch: s.autoSyncOnLaunch,
+        seamlessHandoff: s.seamlessHandoff,
         lastSyncedIso: s.lastSyncedIso,
         lastSummary: s.lastSummary,
         deletedPlaylists: s.deletedPlaylists,
@@ -538,6 +734,136 @@ export const initP2pSync = () => {
       // ignore malformed handoff
     }
   }).catch(() => {});
+
+  // Listen for Remote Control commands from the paired device (Play/Pause/Next/Prev/Seek/Volume)
+  void listen<string>('p2p-remote-control', (event) => {
+    try {
+      const cmd = JSON.parse(event.payload) as {
+        action?: RemoteControlAction;
+        value?: number;
+      };
+      const queue = useQueueStore.getState();
+      switch (cmd.action) {
+        case 'play':
+          playbackManager.play();
+          break;
+        case 'pause':
+          playbackManager.pause();
+          break;
+        case 'toggle':
+          playbackManager.toggle();
+          break;
+        case 'next':
+          queue.goToNext();
+          break;
+        case 'previous':
+          if (useSoundStore.getState().seek > 3) {
+            useSoundStore.getState().seekTo(0);
+          } else {
+            queue.goToPrevious();
+          }
+          break;
+        case 'seek':
+          if (typeof cmd.value === 'number') {
+            useSoundStore.getState().seekTo(cmd.value);
+          }
+          break;
+        case 'volume':
+          if (typeof cmd.value === 'number') {
+            const v = Math.max(0, Math.min(1, cmd.value));
+            void useSettingsStore
+              .getState()
+              .setValue('core.playback.volume', v);
+            const audio = document.querySelector('audio');
+            if (audio) {
+              audio.volume = v;
+            }
+          }
+          break;
+      }
+      window.setTimeout(() => {
+        void useP2pSyncStore.getState().pushLocalPlaybackToRust();
+      }, 200);
+    } catch {
+      // ignore
+    }
+  }).catch(() => {});
+
+  // Listen for Pull-Handoff pause (other device seamlessly took over playback)
+  void listen<string>('p2p-handoff-pause', () => {
+    playbackManager.pause();
+    toast.info('🎧 Playback moved to your other device');
+    window.setTimeout(() => {
+      void useP2pSyncStore.getState().pushLocalPlaybackToRust();
+    }, 200);
+  }).catch(() => {});
+
+  // Push live playback state to Rust so the other device can see & control us
+  let lastPlaybackPush = 0;
+  const pushPlaybackThrottled = (force = false) => {
+    const now = Date.now();
+    if (!force && now - lastPlaybackPush < 1000) {
+      return;
+    }
+    lastPlaybackPush = now;
+    void useP2pSyncStore.getState().pushLocalPlaybackToRust();
+  };
+  useQueueStore.subscribe(() => pushPlaybackThrottled(true));
+  let wasPlayingLocally = false;
+  useSoundStore.subscribe((s) => {
+    const nowPlaying = s.status === 'playing';
+    const flipped = nowPlaying !== wasPlayingLocally;
+    wasPlayingLocally = nowPlaying;
+    pushPlaybackThrottled(flipped);
+    // One-device-at-a-time: if user hits Play here while other device is playing, pause other device!
+    if (flipped && nowPlaying) {
+      const p2p = useP2pSyncStore.getState();
+      if (p2p.remoteState?.isPlaying) {
+        void p2p.sendRemoteControl('pause');
+      }
+    }
+  });
+  pushPlaybackThrottled(true);
+
+  // Poll paired peer's live playback state every 2.5s while app is visible
+  window.setInterval(() => {
+    if (document.visibilityState === 'visible') {
+      const p2p = useP2pSyncStore.getState();
+      if (p2p.peerAddress.trim()) {
+        void p2p.pollRemoteState();
+      }
+    }
+  }, 2500);
+
+  // Seamless Auto-Handoff: when you open/focus this device while your other device is playing,
+  // automatically pull playback here without touching anything!
+  let lastAutoPullAt = 0;
+  const trySeamlessAutoPull = async () => {
+    const now = Date.now();
+    if (now - lastAutoPullAt < 12000) {
+      return;
+    }
+    const p2p = useP2pSyncStore.getState();
+    if (!p2p.seamlessHandoff || !p2p.peerAddress.trim()) {
+      return;
+    }
+    if (useSoundStore.getState().status === 'playing') {
+      return;
+    }
+    const remote = await p2p.pollRemoteState();
+    if (remote?.isPlaying && remote.tracks && remote.tracks.length > 0) {
+      lastAutoPullAt = Date.now();
+      await p2p.pullHandoffFromPeer(false);
+    }
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      void trySeamlessAutoPull();
+    }
+  });
+  window.addEventListener('focus', () => {
+    void trySeamlessAutoPull();
+  });
 
   // Keep cached snapshot fresh when playlists or favorites change, and track deleted playlist IDs
   let prevPlaylistIds = new Set(

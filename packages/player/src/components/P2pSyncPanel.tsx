@@ -1,9 +1,23 @@
-import { Copy, Laptop, Link2, Loader2, RefreshCw, Send } from 'lucide-react';
+import {
+  Copy,
+  Laptop,
+  Link2,
+  Loader2,
+  Pause,
+  Play,
+  RefreshCw,
+  Send,
+  SkipBack,
+  SkipForward,
+  Smartphone,
+  Volume2,
+} from 'lucide-react';
 import { FC, useEffect } from 'react';
 import { toast } from 'sonner';
 
 import { haptic } from '../services/androidMediaBridge';
 import { useP2pSyncStore } from '../services/p2pSync';
+import { useSoundStore } from '../stores/soundStore';
 
 export const P2pSyncPanel: FC = () => {
   const {
@@ -11,22 +25,30 @@ export const P2pSyncPanel: FC = () => {
     pin,
     peerAddress,
     autoSyncOnLaunch,
+    seamlessHandoff,
     syncing,
     localInfo,
+    remoteState,
     lastSyncedIso,
     lastSummary,
     setEnabled,
     setPin,
     setPeerAddress,
     setAutoSyncOnLaunch,
+    setSeamlessHandoff,
     refreshLocalInfo,
+    pollRemoteState,
     syncWithPeer,
     sendHandoffToPeer,
+    pullHandoffFromPeer,
+    sendRemoteControl,
   } = useP2pSyncStore();
+  const localPlaying = useSoundStore((s) => s.status === 'playing');
 
   useEffect(() => {
     void refreshLocalInfo();
-  }, [refreshLocalInfo]);
+    void pollRemoteState();
+  }, [refreshLocalInfo, pollRemoteState]);
 
   const pairingCode = localInfo
     ? `${localInfo.ip}:${localInfo.port}|${pin}`
@@ -44,6 +66,132 @@ export const P2pSyncPanel: FC = () => {
 
   return (
     <div className="space-y-4">
+      {/* Live Nuclear Connect: Choose Playback Device & Remote Control */}
+      {peerAddress.trim() && (
+        <div className="border-border space-y-3 rounded-xl border p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Smartphone size={17} />
+              <h3 className="text-sm font-extrabold">
+                Nuclear Connect — Choose Device & Control
+              </h3>
+            </div>
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                remoteState
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'bg-black/20 opacity-60'
+              }`}
+            >
+              {remoteState ? '● Connected' : 'Offline'}
+            </span>
+          </div>
+
+          {/* Device Switcher */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                haptic('medium');
+                void pullHandoffFromPeer(false);
+              }}
+              className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-extrabold transition active:scale-95 ${
+                localPlaying
+                  ? 'bg-primary text-primary-foreground border-transparent shadow'
+                  : 'border-border bg-black/20'
+              }`}
+            >
+              <span>{localPlaying ? '● ' : ''}This Device</span>
+            </button>
+            <button
+              onClick={() => {
+                haptic('medium');
+                void sendHandoffToPeer(false);
+              }}
+              className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-extrabold transition active:scale-95 ${
+                remoteState?.isPlaying
+                  ? 'bg-primary text-primary-foreground border-transparent shadow'
+                  : 'border-border bg-black/20'
+              }`}
+            >
+              <span>
+                {remoteState?.isPlaying ? '● ' : ''}
+                {remoteState?.deviceName || 'Other Device'}
+              </span>
+            </button>
+          </div>
+
+          {/* Live Remote Control of Other Device */}
+          {remoteState && (
+            <div className="space-y-2 rounded-lg bg-black/20 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-bold">
+                    {remoteState.title || 'Idle on other device'}
+                  </div>
+                  <div className="truncate text-[11px] opacity-70">
+                    {remoteState.artist || remoteState.deviceName}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      haptic('light');
+                      void sendRemoteControl('previous');
+                    }}
+                    className="flex size-8 items-center justify-center rounded-full bg-black/25 active:scale-90"
+                    aria-label="Remote Previous"
+                  >
+                    <SkipBack size={15} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      haptic('medium');
+                      void sendRemoteControl('toggle');
+                    }}
+                    className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-full shadow active:scale-90"
+                    aria-label="Remote Play/Pause"
+                  >
+                    {remoteState.isPlaying ? (
+                      <Pause size={16} />
+                    ) : (
+                      <Play size={16} />
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      haptic('light');
+                      void sendRemoteControl('next');
+                    }}
+                    className="flex size-8 items-center justify-center rounded-full bg-black/25 active:scale-90"
+                    aria-label="Remote Next"
+                  >
+                    <SkipForward size={15} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px]">
+                <Volume2 size={14} className="opacity-75" />
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={remoteState.volume ?? 1}
+                  onChange={(e) =>
+                    void sendRemoteControl('volume', Number(e.target.value))
+                  }
+                  className="accent-primary flex-1"
+                />
+                <span className="w-8 text-right font-mono">
+                  {Math.round((remoteState.volume ?? 1) * 100)}%
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* This Device Card */}
       <div className="border-border space-y-3 rounded-xl border p-4">
         <div className="flex items-center justify-between gap-2">
@@ -135,6 +283,15 @@ export const P2pSyncPanel: FC = () => {
             type="checkbox"
             checked={autoSyncOnLaunch}
             onChange={(e) => setAutoSyncOnLaunch(e.target.checked)}
+          />
+        </label>
+
+        <label className="flex items-center justify-between text-xs font-semibold">
+          <span>⚡ Seamless Auto-Handoff (auto-switch when opening app)</span>
+          <input
+            type="checkbox"
+            checked={seamlessHandoff}
+            onChange={(e) => setSeamlessHandoff(e.target.checked)}
           />
         </label>
 

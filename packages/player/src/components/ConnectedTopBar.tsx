@@ -16,6 +16,7 @@ import { useCoreSetting } from '../hooks/useCoreSetting';
 import { useFramelessWindow } from '../hooks/useFramelessWindow';
 import { useLayoutStore } from '../stores/layoutStore';
 import { useQueueStore } from '../stores/queueStore';
+import { ConnectDevicesButton } from './ConnectDevicesButton';
 import { ConnectedThemeController } from './ConnectedThemeController';
 import { JamQrCodeButton } from './JamQrCodeButton';
 import { SearchBox } from './SearchBox';
@@ -99,6 +100,11 @@ export const ConnectedTopBar: FC = () => {
         {!isAndroid && (
           <div className="hidden md:flex">
             <JamQrCodeButton />
+          </div>
+        )}
+        {!isAndroid && (
+          <div className="hidden md:flex">
+            <ConnectDevicesButton />
           </div>
         )}
         <ConnectedThemeController />

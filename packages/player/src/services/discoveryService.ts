@@ -12,6 +12,13 @@ const CONTEXT_SIZE = 10;
 const RECOMMENDATION_LIMIT = 5;
 
 export const initDiscoveryService = () => {
+  // Disable Discover by default on startup (user can still toggle it on manually during a session)
+  try {
+    void useSettingsStore.getState().setValue('core.playback.discovery', false);
+  } catch {
+    // ignore if settings not ready
+  }
+
   return eventBus.on('trackStarted', async () => {
     const isEnabled = useSettingsStore
       .getState()

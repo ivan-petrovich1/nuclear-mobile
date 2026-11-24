@@ -1,8 +1,9 @@
 import { Fragment } from 'react';
 
 import { useTranslation } from '@nuclearplayer/i18n';
-import { ScrollableArea, ViewShell } from '@nuclearplayer/ui';
+import { Button, ScrollableArea, ViewShell } from '@nuclearplayer/ui';
 
+import { useDownloadStore } from '../../stores/downloadStore';
 import { SettingsSection } from './SettingsSection';
 import { useSettingsGroups } from './useSettingsGroups';
 import { useSettingsScrollSpy } from './useSettingsScrollSpy';
@@ -11,6 +12,8 @@ export const Settings = () => {
   const { t } = useTranslation('preferences');
   const groups = useSettingsGroups();
   const { viewportRef, registerSection } = useSettingsScrollSpy();
+  const downloadedCount = useDownloadStore((s) => Object.keys(s.items).length);
+  const clearAllDownloads = useDownloadStore((s) => s.clearAllDownloads);
 
   return (
     <ViewShell title={t('general.title')}>
@@ -31,6 +34,21 @@ export const Settings = () => {
                     title={t(`${group.name}.title`, group.name)}
                     settings={group.settings}
                   />
+                  {group.name === 'playback' && downloadedCount > 0 && (
+                    <div className="border-border bg-muted/40 mt-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 text-sm">
+                      <span>
+                        Offline cache: {downloadedCount} downloaded song
+                        {downloadedCount === 1 ? '' : 's'}
+                      </span>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void clearAllDownloads()}
+                      >
+                        Clear offline downloads
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </Fragment>
             ))}

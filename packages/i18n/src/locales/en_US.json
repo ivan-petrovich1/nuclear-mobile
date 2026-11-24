@@ -440,6 +440,14 @@
       "streamVerificationService": {
         "title": "Online verification",
         "description": "Nuclear sends your verifications to the verification service and gets the streams that other users verified. This setting has no effect when stream verification is off."
+      },
+      "autoDownloadPlayed": {
+        "title": "Auto-download played songs",
+        "description": "Automatically save played songs for offline playback. Off by default to save storage space."
+      },
+      "exportDownloadsToPublicFolder": {
+        "title": "Export downloads to Downloads folder",
+        "description": "Also save an extra copy of downloaded songs in your system Downloads/Nuclear folder."
       }
     },
     "history": {

@@ -1459,6 +1459,70 @@ exports[`Settings view > (Snapshot) renders the settings view 1`] = `
                                     Nuclear sends your verifications to the verification service and gets the streams that other users verified. This setting has no effect when stream verification is off.
                                   </p>
                                 </div>
+                                <div
+                                  class="flex flex-col gap-2"
+                                >
+                                  <div
+                                    class="flex items-center gap-3"
+                                  >
+                                    <button
+                                      aria-checked="false"
+                                      aria-label="Auto-download played songs"
+                                      class="border-border focus:ring-ring focus:ring-offset-muted relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full border-(length:--border-width) transition-all focus:ring-2 focus:ring-offset-2 focus:outline-none data-checked:surface-primary surface-input data-disabled:cursor-not-allowed data-disabled:opacity-50 group"
+                                      data-headlessui-state=""
+                                      id="headlessui-switch-:r1b:"
+                                      role="switch"
+                                      tabindex="0"
+                                      type="button"
+                                    >
+                                      <span
+                                        class="border-border bg-muted [&>svg]:fill-muted pointer-events-none flex h-4 w-4 items-center justify-center rounded-full border-(length:--border-width) ring-0 transition-transform translate-x-1 group-data-checked:translate-x-5"
+                                      />
+                                    </button>
+                                    <span
+                                      class="text-foreground text-sm font-semibold"
+                                    >
+                                      Auto-download played songs
+                                    </span>
+                                  </div>
+                                  <p
+                                    class="text-foreground/60 text-sm select-none"
+                                  >
+                                    Automatically save played songs for offline playback. Off by default to save storage space.
+                                  </p>
+                                </div>
+                                <div
+                                  class="flex flex-col gap-2"
+                                >
+                                  <div
+                                    class="flex items-center gap-3"
+                                  >
+                                    <button
+                                      aria-checked="false"
+                                      aria-label="Export downloads to Downloads folder"
+                                      class="border-border focus:ring-ring focus:ring-offset-muted relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full border-(length:--border-width) transition-all focus:ring-2 focus:ring-offset-2 focus:outline-none data-checked:surface-primary surface-input data-disabled:cursor-not-allowed data-disabled:opacity-50 group"
+                                      data-headlessui-state=""
+                                      id="headlessui-switch-:r1c:"
+                                      role="switch"
+                                      tabindex="0"
+                                      type="button"
+                                    >
+                                      <span
+                                        class="border-border bg-muted [&>svg]:fill-muted pointer-events-none flex h-4 w-4 items-center justify-center rounded-full border-(length:--border-width) ring-0 transition-transform translate-x-1 group-data-checked:translate-x-5"
+                                      />
+                                    </button>
+                                    <span
+                                      class="text-foreground text-sm font-semibold"
+                                    >
+                                      Export downloads to Downloads folder
+                                    </span>
+                                  </div>
+                                  <p
+                                    class="text-foreground/60 text-sm select-none"
+                                  >
+                                    Also save an extra copy of downloaded songs in your system Downloads/Nuclear folder.
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           </section>
@@ -1495,7 +1559,7 @@ exports[`Settings view > (Snapshot) renders the settings view 1`] = `
                                       class="border-border focus:ring-ring focus:ring-offset-muted relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full border-(length:--border-width) transition-all focus:ring-2 focus:ring-offset-2 focus:outline-none data-checked:surface-primary surface-input data-disabled:cursor-not-allowed data-disabled:opacity-50 group"
                                       data-checked=""
                                       data-headlessui-state="checked"
-                                      id="headlessui-switch-:r1b:"
+                                      id="headlessui-switch-:r1d:"
                                       role="switch"
                                       tabindex="0"
                                       type="button"
@@ -1552,7 +1616,7 @@ exports[`Settings view > (Snapshot) renders the settings view 1`] = `
                                       class="border-border focus:ring-ring focus:ring-offset-muted relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full border-(length:--border-width) transition-all focus:ring-2 focus:ring-offset-2 focus:outline-none data-checked:surface-primary surface-input data-disabled:cursor-not-allowed data-disabled:opacity-50 group"
                                       data-checked=""
                                       data-headlessui-state="checked"
-                                      id="headlessui-switch-:r1c:"
+                                      id="headlessui-switch-:r1e:"
                                       role="switch"
                                       tabindex="0"
                                       type="button"
@@ -1584,7 +1648,7 @@ exports[`Settings view > (Snapshot) renders the settings view 1`] = `
                                       aria-label="Auto-install updates"
                                       class="border-border focus:ring-ring focus:ring-offset-muted relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full border-(length:--border-width) transition-all focus:ring-2 focus:ring-offset-2 focus:outline-none data-checked:surface-primary surface-input data-disabled:cursor-not-allowed data-disabled:opacity-50 group"
                                       data-headlessui-state=""
-                                      id="headlessui-switch-:r1d:"
+                                      id="headlessui-switch-:r1f:"
                                       role="switch"
                                       tabindex="0"
                                       type="button"

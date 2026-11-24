@@ -9,7 +9,7 @@ import { errorMessage } from '../utils/errorMessage';
 import { reportError } from '../utils/logging';
 import { getSetting } from './settingsStore';
 
-const CURRENT_RELEASE_VERSION = '1.0.2';
+const CURRENT_RELEASE_VERSION = '1.0.3';
 const GITHUB_LATEST_RELEASE_URL =
   'https://api.github.com/repos/ivan-petrovich1/nuclear-mobile/releases/latest';
 

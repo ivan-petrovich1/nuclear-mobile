@@ -9,6 +9,7 @@ import type { StreamCandidate, Track } from '@nuclearplayer/model';
 import { candidatesForTrack } from '../services/streamResolution/candidateSource';
 import { hasFreshStream, streamingHost } from '../services/streamingHost';
 import { downloadFile } from '../services/tauri/commands';
+import { getSetting } from './settingsStore';
 
 declare global {
   interface Window {
@@ -76,6 +77,7 @@ type DownloadStoreState = {
   downloadTrack: (track: Track, silent?: boolean) => Promise<boolean>;
   downloadTracks: (tracks: Track[]) => Promise<void>;
   removeDownload: (track: Track) => Promise<void>;
+  clearAllDownloads: () => Promise<void>;
 };
 
 export const getTrackDownloadKey = (track: Track): string => {
@@ -215,6 +217,10 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
       let ext = 'm4a';
       let lastError: unknown;
 
+      const exportToPublic = Boolean(
+        getSetting('core.playback.exportDownloadsToPublicFolder'),
+      );
+
       for (const candidate of resolvedCandidates) {
         const stream = candidate.stream;
         if (!stream?.url) {
@@ -226,16 +232,21 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
         const destFile = await join(downloadsDir, fileName);
 
         try {
-          await downloadFile(stream.url, `${destFile}|${niceExportName}`);
-          try {
-            const mimeType = ext === 'webm' ? 'audio/webm' : 'audio/mp4';
-            window.NuclearAndroid?.exportToPublicDownloads(
-              destFile,
-              niceExportName,
-              mimeType,
-            );
-          } catch {
-            // Public MediaStore export is best-effort; offline playback still works from appDataDir
+          await downloadFile(
+            stream.url,
+            exportToPublic ? `${destFile}|${niceExportName}` : destFile,
+          );
+          if (exportToPublic) {
+            try {
+              const mimeType = ext === 'webm' ? 'audio/webm' : 'audio/mp4';
+              window.NuclearAndroid?.exportToPublicDownloads(
+                destFile,
+                niceExportName,
+                mimeType,
+              );
+            } catch {
+              // Public MediaStore export is best-effort; offline playback still works from appDataDir
+            }
           }
           downloadedFrom = candidate;
           break;
@@ -340,8 +351,13 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
 
     set({ isBatchDownloading: false, batchProgress: null });
     if (succeeded > 0) {
+      const exportToPublic = Boolean(
+        getSetting('core.playback.exportDownloadsToPublicFolder'),
+      );
       toast.success(
-        `Downloaded ${succeeded}/${total} songs (saved for offline playback & in Download/Nuclear)`,
+        exportToPublic
+          ? `Downloaded ${succeeded}/${total} songs (saved for offline playback & in Downloads/Nuclear)`
+          : `Downloaded ${succeeded}/${total} songs for offline playback`,
         { id: toastId },
       );
     } else {
@@ -369,6 +385,30 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
       // Ignore if file already removed
     }
     toast.info(`Removed offline download: "${track.title}"`);
+  },
+
+  clearAllDownloads: async () => {
+    const entries = Object.values(get().items);
+    if (entries.length === 0) {
+      return;
+    }
+
+    set({ items: {} });
+    await persistItems({});
+
+    for (const entry of entries) {
+      try {
+        await remove(`${DOWNLOADS_DIR_NAME}/${entry.fileName}`, {
+          baseDir: BaseDirectory.AppData,
+        });
+      } catch {
+        // Ignore individual file deletion failures
+      }
+    }
+
+    toast.success(
+      `Cleared ${entries.length} offline download${entries.length === 1 ? '' : 's'}`,
+    );
   },
 }));
 

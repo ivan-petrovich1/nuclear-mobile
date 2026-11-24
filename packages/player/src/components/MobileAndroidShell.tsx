@@ -120,6 +120,11 @@ export const MobileAndroidShell: FC = () => {
     useCoreSetting<boolean>('playback.shuffle');
   const [repeatMode, setRepeatMode] =
     useCoreSetting<RepeatMode>('playback.repeat');
+  const [autoDownloadPlayed, setAutoDownloadPlayed] = useCoreSetting<boolean>(
+    'playback.autoDownloadPlayed',
+  );
+  const [exportDownloadsToPublic, setExportDownloadsToPublic] =
+    useCoreSetting<boolean>('playback.exportDownloadsToPublicFolder');
 
   const trackActions = useTrackActions();
   const downloadedItems = useDownloadStore((s) => s.items);
@@ -127,6 +132,7 @@ export const MobileAndroidShell: FC = () => {
   const downloadTrack = useDownloadStore((s) => s.downloadTrack);
   const downloadTracks = useDownloadStore((s) => s.downloadTracks);
   const removeDownload = useDownloadStore((s) => s.removeDownload);
+  const clearAllDownloads = useDownloadStore((s) => s.clearAllDownloads);
 
   const {
     nowPlayingOpen,
@@ -134,7 +140,6 @@ export const MobileAndroidShell: FC = () => {
     oledBlackMode,
     sponsorBlockEnabled,
     preResolveEnabled,
-    smartAutoCacheEnabled,
     playbackSpeed,
     preservePitch,
     bassBoostDb,
@@ -163,7 +168,6 @@ export const MobileAndroidShell: FC = () => {
     setOledBlackMode,
     setSponsorBlockEnabled,
     setPreResolveEnabled,
-    setSmartAutoCacheEnabled,
     setPlaybackSpeed,
     setPreservePitch,
     setBassBoostDb,
@@ -1103,12 +1107,26 @@ export const MobileAndroidShell: FC = () => {
               </label>
               <label className="flex items-center justify-between text-xs font-semibold">
                 <span>
-                  📥 Smart Offline Auto-Cache (auto-save played songs)
+                  📥 Auto-download played songs (off by default to save space)
                 </span>
                 <input
                   type="checkbox"
-                  checked={smartAutoCacheEnabled}
-                  onChange={(e) => setSmartAutoCacheEnabled(e.target.checked)}
+                  checked={Boolean(autoDownloadPlayed)}
+                  onChange={(e) => {
+                    haptic('light');
+                    void setAutoDownloadPlayed(e.target.checked);
+                  }}
+                />
+              </label>
+              <label className="flex items-center justify-between text-xs font-semibold">
+                <span>📂 Export copy to Downloads/Nuclear folder</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(exportDownloadsToPublic)}
+                  onChange={(e) => {
+                    haptic('light');
+                    void setExportDownloadsToPublic(e.target.checked);
+                  }}
                 />
               </label>
               <label className="flex items-center justify-between text-xs font-semibold">
@@ -1131,10 +1149,25 @@ export const MobileAndroidShell: FC = () => {
 
             {/* Downloaded Songs List */}
             <div>
-              <h3 className="mb-2 text-sm font-bold">
-                Downloaded Songs ({Object.keys(downloadedItems).length}) —
-                Saved in App & Download/Nuclear/
-              </h3>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold">
+                  Downloaded Songs ({Object.keys(downloadedItems).length})
+                  {exportDownloadsToPublic
+                    ? ' — Saved in App & Downloads/Nuclear/'
+                    : ' — Offline App Cache'}
+                </h3>
+                {Object.keys(downloadedItems).length > 0 && (
+                  <button
+                    onClick={() => {
+                      haptic('medium');
+                      void clearAllDownloads();
+                    }}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-[11px] font-bold text-rose-400 active:scale-95"
+                  >
+                    <Trash2 size={12} /> Clear All
+                  </button>
+                )}
+              </div>
               {Object.values(downloadedItems).length === 0 ? (
                 <div className="border-border rounded-lg border p-6 text-center text-xs opacity-70">
                   No offline songs downloaded yet. Tap the <strong>Download</strong>{' '}
@@ -2207,11 +2240,14 @@ export const MobileAndroidShell: FC = () => {
                   />
                 </label>
                 <label className="flex items-center justify-between">
-                  <span>📥 Smart Offline Auto-Cache on Play</span>
+                  <span>📥 Auto-download played songs (off by default)</span>
                   <input
                     type="checkbox"
-                    checked={smartAutoCacheEnabled}
-                    onChange={(e) => setSmartAutoCacheEnabled(e.target.checked)}
+                    checked={Boolean(autoDownloadPlayed)}
+                    onChange={(e) => {
+                      haptic('light');
+                      void setAutoDownloadPlayed(e.target.checked);
+                    }}
                   />
                 </label>
               </div>
