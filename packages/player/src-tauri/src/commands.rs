@@ -302,6 +302,126 @@ pub async fn download_file(url: String, dest_path: PathBuf) -> Result<(), String
     })
 }
 
+#[command]
+#[specta::specta]
+pub async fn self_update_appimage(url: String) -> Result<bool, String> {
+    #[cfg(target_os = "linux")]
+    {
+        use futures::StreamExt;
+        use std::os::unix::fs::PermissionsExt;
+        use std::time::Duration;
+        use tokio::io::AsyncWriteExt;
+
+        let Ok(appimage_str) = std::env::var("APPIMAGE") else {
+            return Ok(false);
+        };
+        let appimage_str = appimage_str.trim().to_string();
+        if appimage_str.is_empty() {
+            return Ok(false);
+        }
+        let appimage_path = PathBuf::from(&appimage_str);
+        if !appimage_path.is_file() {
+            return Ok(false);
+        }
+
+        let tmp_path = PathBuf::from(format!("{appimage_str}.update.tmp"));
+        let client = crate::net::http_client_builder()
+            .user_agent("Nuclear-Updater/1.0")
+            .timeout(Duration::from_secs(300))
+            .connect_timeout(Duration::from_secs(20))
+            .build()
+            .map_err(|e| e.to_string())?;
+
+        let download_res: Result<(), Box<dyn std::error::Error>> = async {
+            let resp = client.get(&url).send().await?;
+            if !resp.status().is_success() {
+                return Err(format!("HTTP error {}", resp.status()).into());
+            }
+
+            let mut file = tokio::fs::File::create(&tmp_path).await?;
+            let mut stream = resp.bytes_stream();
+            let mut total_bytes: u64 = 0;
+            let mut magic = [0u8; 4];
+            let mut magic_len = 0usize;
+
+            while let Some(chunk) = stream.next().await {
+                let chunk = chunk?;
+                if magic_len < 4 {
+                    let take = (4 - magic_len).min(chunk.len());
+                    magic[magic_len..magic_len + take].copy_from_slice(&chunk[..take]);
+                    magic_len += take;
+                }
+                total_bytes += chunk.len() as u64;
+                file.write_all(&chunk).await?;
+            }
+            file.flush().await?;
+            drop(file);
+
+            if magic_len < 4 || &magic != b"\x7fELF" {
+                return Err("Downloaded file is not a valid ELF AppImage".into());
+            }
+            if total_bytes <= 1_000_000 {
+                return Err(format!("Downloaded AppImage unexpectedly small ({total_bytes} bytes)").into());
+            }
+
+            fs::set_permissions(&tmp_path, fs::Permissions::from_mode(0o755))?;
+            fs::rename(&tmp_path, &appimage_path)?;
+            Ok(())
+        }
+        .await;
+
+        if let Err(err) = download_res {
+            let _ = fs::remove_file(&tmp_path);
+            return Err(err.to_string());
+        }
+
+        log::info!("Updated AppImage in place: {:?}", appimage_path);
+        return Ok(true);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = url;
+        Ok(false)
+    }
+}
+
+#[command]
+#[specta::specta]
+pub fn relaunch_appimage(app: tauri::AppHandle) -> Result<bool, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let Ok(appimage_str) = std::env::var("APPIMAGE") else {
+            return Ok(false);
+        };
+        let appimage_str = appimage_str.trim();
+        if appimage_str.is_empty() {
+            return Ok(false);
+        }
+        let appimage_path = Path::new(appimage_str);
+        if !appimage_path.is_file() {
+            return Ok(false);
+        }
+
+        std::process::Command::new(appimage_path)
+            .env_remove("APPIMAGE")
+            .env_remove("APPDIR")
+            .env_remove("OWD")
+            .env_remove("ARGV0")
+            .spawn()
+            .map_err(|e| e.to_string())?;
+
+        app.exit(0);
+        return Ok(true);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = app;
+        Ok(false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

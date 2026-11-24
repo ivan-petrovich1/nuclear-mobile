@@ -43,6 +43,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         commands::copy_dir_recursive,
         commands::extract_zip,
         commands::download_file,
+        commands::self_update_appimage,
+        commands::relaunch_appimage,
         commands::sha256_file,
         http::http_fetch,
         ytdlp::ytdlp_search,
@@ -59,6 +61,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         p2p_sync::p2p_sync_info,
         p2p_sync::p2p_sync_configure,
         p2p_sync::p2p_sync_update_snapshot,
+        p2p_sync::p2p_sync_update_playback,
         ytdlp_setup::ytdlp_ensure_installed,
         discord::discord_connect,
         discord::discord_disconnect,
@@ -76,6 +79,60 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         history::commands::history_top_albums,
         history::commands::history_top_tracks
     ])
+}
+
+#[cfg(feature = "seed-user-data")]
+const INITIAL_USER_DATA_ZIP: &[u8] = include_bytes!("../initial_user_data.zip");
+
+#[cfg(feature = "seed-user-data")]
+fn seed_initial_user_data(app_handle: &tauri::AppHandle) {
+    use std::fs;
+    use std::io::Cursor;
+    use tauri::Manager;
+    use zip::ZipArchive;
+
+    let Ok(data_dir) = app_handle.path().app_data_dir() else {
+        return;
+    };
+    let seed_marker = data_dir.join(".seed_v2");
+    if seed_marker.exists() {
+        return;
+    }
+    let plugins_json_path = data_dir.join("plugins.json");
+
+    log::info!(
+        "First launch detected; seeding initial user data into {:?}",
+        data_dir
+    );
+    let _ = fs::create_dir_all(&data_dir);
+
+    let Ok(mut archive) = ZipArchive::new(Cursor::new(INITIAL_USER_DATA_ZIP)) else {
+        return;
+    };
+
+    for i in 0..archive.len() {
+        let Ok(mut entry) = archive.by_index(i) else {
+            continue;
+        };
+        let out_path = data_dir.join(entry.mangled_name());
+        if entry.is_dir() {
+            let _ = fs::create_dir_all(&out_path);
+        } else {
+            if let Some(parent) = out_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            if let Ok(mut out_file) = fs::File::create(&out_path) {
+                let _ = std::io::copy(&mut entry, &mut out_file);
+            }
+        }
+    }
+
+    if let Ok(contents) = fs::read_to_string(&plugins_json_path) {
+        let new_base = data_dir.to_string_lossy();
+        let rewritten = contents.replace("/home/mustrafa/.local/share/com.nuclearplayer", &new_base);
+        let _ = fs::write(&plugins_json_path, rewritten);
+    }
+    let _ = fs::write(&seed_marker, b"ok");
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -144,6 +201,8 @@ pub fn run() {
             if let Some(name) = &profile {
                 log::info!("Using profile {name}");
             }
+            #[cfg(feature = "seed-user-data")]
+            seed_initial_user_data(app.handle());
             logging::mark_startup_complete();
             bridge::init_bridge(app.handle().clone());
             mcp::init_mcp(app.handle().clone());

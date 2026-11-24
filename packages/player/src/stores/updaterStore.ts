@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
@@ -14,6 +15,7 @@ const GITHUB_LATEST_RELEASE_URL =
   'https://api.github.com/repos/ivan-petrovich1/nuclear-mobile/releases/latest';
 
 const externalFallbackUpdates = new WeakSet<object>();
+const externalFallbackUrls = new WeakMap<object, string>();
 
 type GitHubReleaseAsset = {
   name?: string;
@@ -114,6 +116,7 @@ const checkGitHubReleaseFallback = async (): Promise<Update | null> => {
   } as unknown as Update;
 
   externalFallbackUpdates.add(syntheticUpdate);
+  externalFallbackUrls.set(syntheticUpdate, downloadUrl);
   return syntheticUpdate;
 };
 
@@ -191,7 +194,12 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
       error: null,
     });
 
-    if (update !== null && !externalFallbackUpdates.has(update)) {
+    const isAndroid =
+      typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+    if (
+      update !== null &&
+      (!externalFallbackUpdates.has(update) || !isAndroid)
+    ) {
       const autoInstall = getSetting('core.updates.autoInstall');
       if (autoInstall === true) {
         await get().downloadUpdate();
@@ -208,6 +216,28 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
     set({ isDownloading: true, downloadProgress: 0, error: null });
     if (externalFallbackUpdates.has(updateInfo)) {
       try {
+        const isAndroid =
+          typeof navigator !== 'undefined' &&
+          /Android/i.test(navigator.userAgent);
+        const url = externalFallbackUrls.get(updateInfo);
+        if (!isAndroid && url) {
+          const updatedInPlace = await invoke<boolean>(
+            'self_update_appimage',
+            { url },
+          ).catch(() => false);
+          if (updatedInPlace === true) {
+            toast.success(
+              `Updated AppImage to v${updateInfo.version} — click Restart to apply`,
+            );
+            set({
+              isDownloading: false,
+              isInstalling: false,
+              isReadyToRestart: true,
+              downloadProgress: 100,
+            });
+            return;
+          }
+        }
         await updateInfo.downloadAndInstall();
       } catch (error) {
         const message = errorMessage(error);
@@ -253,6 +283,12 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
 
   restartToUpdate: async () => {
     try {
+      const relaunched = await invoke<boolean>('relaunch_appimage').catch(
+        () => false,
+      );
+      if (relaunched === true) {
+        return;
+      }
       await relaunch();
     } catch (error) {
       await reportError('updates', {
