@@ -160,6 +160,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh label create upstream-sync --color 1D76DB --description "Automated upstream sync from nukeop/nuclear" --force
 
@@ -187,7 +188,7 @@ jobs:
             gh pr create --base main --head upstream-sync --label upstream-sync --title "$TITLE" --body-file /tmp/pr-body.md
           fi
 
-          PR_URL=$(gh pr view upstream-sync --json url --jq '.url')
+          PR_URL=$(gh pr list --head upstream-sync --state open --json url --jq '.[0].url // empty')
           ISSUE_NUM=$(gh issue list --label upstream-sync --state open --json number --jq '.[0].number // empty')
           if [ -n "$ISSUE_NUM" ]; then
             gh issue close "$ISSUE_NUM" --comment "Upstream changes now merge cleanly in ${PR_URL}."
@@ -198,6 +199,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh label create upstream-sync --color 1D76DB --description "Automated upstream sync from nukeop/nuclear" --force
 
