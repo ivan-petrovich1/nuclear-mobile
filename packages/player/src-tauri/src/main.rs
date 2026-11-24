@@ -101,4 +101,44 @@ fn apply_linux_workarounds() {
             std::env::set_var("PIPEWIRE_LATENCY", "1024/48000");
         }
     }
+
+    apply_appimage_fontconfig_workaround();
+}
+
+#[cfg(target_os = "linux")]
+fn apply_appimage_fontconfig_workaround() {
+    // Ubuntu 22.04's bundled WebKitGTK/Skia inside the AppImage aborts with SIGABRT
+    // in colrv1_configure_skpaint when rendering COLRv1 color emoji fonts shipped on
+    // newer distros (Fedora 43/44, Bazzite, Nobara, etc.). Reject COLRv1 fonts via a
+    // Fontconfig wrapper so Fontconfig falls back to bitmap/CBDT emoji fonts (e.g. Twemoji).
+    if std::env::var_os("APPIMAGE").is_none() || std::env::var_os("FONTCONFIG_FILE").is_some() {
+        return;
+    }
+
+    let base_dir = std::env::var_os("XDG_RUNTIME_DIR")
+        .filter(|dir| !dir.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+
+    let uid = unsafe { libc::geteuid() };
+    let conf_path = base_dir.join(format!("nuclear-appimage-fontconfig-{uid}.conf"));
+
+    const FONTCONFIG_XML: &str = r#"<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">
+<fontconfig>
+  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>
+  <selectfont>
+    <rejectfont>
+      <glob>*COLRv1*</glob>
+      <glob>*colrv1*</glob>
+    </rejectfont>
+  </selectfont>
+</fontconfig>
+"#;
+
+    if std::fs::write(&conf_path, FONTCONFIG_XML).is_ok() {
+        unsafe {
+            std::env::set_var("FONTCONFIG_FILE", &conf_path);
+        }
+    }
 }
