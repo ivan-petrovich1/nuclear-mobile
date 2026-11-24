@@ -3,6 +3,7 @@ import {
   KeyboardIcon,
   Link2Icon,
   PaletteIcon,
+  RefreshCwIcon,
   ScrollTextIcon,
   SparklesIcon,
 } from 'lucide-react';
@@ -20,6 +21,7 @@ import { useSettingsGroups } from '../views/Settings/useSettingsGroups';
 import { Themes } from '../views/Themes/Themes';
 import { WhatsNew } from '../views/WhatsNew';
 import { P2pSyncPanel } from './P2pSyncPanel';
+import { SpotifyAccountSyncPanel } from './SpotifyAccountSyncPanel';
 
 const APP_TABS = [
   {
@@ -45,6 +47,16 @@ const APP_TABS = [
     labelKey: 'logs.title',
     icon: <ScrollTextIcon />,
     view: <Logs />,
+  },
+  {
+    id: 'spotify-sync',
+    labelKey: 'Spotify Sync',
+    icon: <RefreshCwIcon />,
+    view: (
+      <div className="p-4">
+        <SpotifyAccountSyncPanel />
+      </div>
+    ),
   },
   {
     id: 'p2p-sync',

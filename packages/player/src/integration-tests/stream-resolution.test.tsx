@@ -2,7 +2,7 @@ import { waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 
 import { providersHost } from '../services/providersHost';
-import { useQueueStore } from '../stores/queueStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSoundStore } from '../stores/soundStore';
 import { useStartupStore } from '../stores/startupStore';
@@ -76,6 +76,7 @@ describe('Stream Resolution Integration', () => {
       expect(src).toEqual({
         url: 'http://127.0.0.1:9100/stream/aHR0cHM6Ly9leGFtcGxlLmNvbS95dC0xLm1wMw',
         protocol: 'https',
+        mimeType: 'audio/mpeg',
       });
 
       const currentItem = StreamResolutionWrapper.getCurrentQueueItem();

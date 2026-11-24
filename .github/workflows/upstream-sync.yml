@@ -48,7 +48,12 @@ jobs:
           fi
 
           UPSTREAM_SHA=$(git rev-parse --short upstream/master)
-          MERGE_BASE=$(git merge-base --short HEAD upstream/master || echo "unknown")
+          MERGE_BASE_FULL=$(git merge-base HEAD upstream/master || true)
+          if [ -n "$MERGE_BASE_FULL" ]; then
+            MERGE_BASE=$(git rev-parse --short "$MERGE_BASE_FULL")
+          else
+            MERGE_BASE="unknown"
+          fi
 
           NON_TRANS_TOTAL=$(git rev-list --count --no-merges --grep='^New translations ' --invert-grep HEAD..upstream/master)
           TRANS_TOTAL=$(git rev-list --count --no-merges --grep='^New translations ' HEAD..upstream/master)
@@ -79,7 +84,6 @@ jobs:
           REMAINING=$(git diff --name-only --diff-filter=U)
           if [ -z "$REMAINING" ]; then
             git commit -m "chore(upstream): sync ${NEW_COUNT} commits from nukeop/nuclear (${UPSTREAM_SHA})"
-            git push --force origin upstream-sync
             {
               echo "has_updates=true"
               echo "status=clean"
@@ -131,6 +135,18 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Close stale sync issue when up to date
+        if: steps.merge.outputs.has_updates == 'false'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ISSUE_NUM=$(gh issue list --label upstream-sync --state open --json number --jq '.[0].number // empty')
+          if [ -n "$ISSUE_NUM" ]; then
+            gh issue close "$ISSUE_NUM" --comment "Repository is now up to date with nukeop/nuclear."
+          fi
+
       - name: Setup PNPM
         if: steps.merge.outputs.status == 'clean'
         uses: pnpm/action-setup@v6
@@ -141,12 +157,23 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Install dependencies and build workspace packages
+      - name: Install dependencies and capture lockfile updates
         if: steps.merge.outputs.status == 'clean'
         shell: bash
         run: |
           pnpm install --no-frozen-lockfile
+          if ! git diff --quiet pnpm-lock.yaml; then
+            git add pnpm-lock.yaml
+            git commit --amend --no-edit
+          fi
+
+      - name: Build workspace packages and frontend
+        id: build
+        if: steps.merge.outputs.status == 'clean'
+        shell: bash
+        run: |
           pnpm turbo build --filter='@nuclearplayer/player^...'
+          pnpm --filter @nuclearplayer/player build:frontend
 
       - name: Run player tests on merged branch
         id: tests
@@ -155,13 +182,15 @@ jobs:
         shell: bash
         run: pnpm --filter @nuclearplayer/player test
 
-      - name: Open or update clean upstream sync PR
+      - name: Push verified branch and open/update upstream sync PR
         if: steps.merge.outputs.status == 'clean'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
+          git push --force origin upstream-sync
+
           gh label create upstream-sync --color 1D76DB --description "Automated upstream sync from nukeop/nuclear" --force
 
           TEST_OUTCOME="${{ steps.tests.outcome }}"
@@ -174,6 +203,7 @@ jobs:
             echo ""
             echo "- **Upstream commits:** ${NEW_COUNT} new commits since \`${MERGE_BASE}\` (up to \`${UPSTREAM_SHA}\`)"
             echo "- **Merge status:** Clean merge — zero fork files were overwritten"
+            echo "- **Workspace + frontend build:** Passed"
             echo "- **Player tests (\`pnpm --filter @nuclearplayer/player test\`):** \`${TEST_OUTCOME}\`"
             echo ""
             echo "## New Upstream Commits"

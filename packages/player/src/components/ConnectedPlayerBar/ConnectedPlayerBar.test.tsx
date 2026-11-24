@@ -1,8 +1,10 @@
-import { act } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import { useMobileEnhancementsStore } from '../../services/mobileEnhancements';
 import { providersHost } from '../../services/providersHost';
-import { useQueueStore } from '../../stores/queueStore';
+import { useQueueStore } from '../../stores/queue/queueStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSoundStore } from '../../stores/soundStore';
 import { DiscoveryProviderBuilder } from '../../test/builders/DiscoveryProviderBuilder';
@@ -13,6 +15,12 @@ beforeEach(() => {
   useQueueStore.setState({
     items: [],
     currentIndex: 0,
+  });
+  useMobileEnhancementsStore.setState({
+    desktopHubOpen: false,
+    nowPlayingOpen: false,
+    desktopStreamPickerOpen: false,
+    sleepEndAt: null,
   });
   useSettingsStore.setState({
     definitions: {},
@@ -204,5 +212,26 @@ describe('ConnectedVolume', () => {
       'core.playback.volume'
     ] as number;
     expect(storedVolume).toBe(0.75);
+  });
+});
+
+describe('Desktop Android-Parity Controls', () => {
+  it('opens Nuclear Hub to Spotify Sync and Audio DSP without shake-to-skip', async () => {
+    await Wrapper.mount();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sleep Timer' }));
+    expect(useMobileEnhancementsStore.getState().sleepEndAt).not.toBeNull();
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Open Audio DSP' }),
+    );
+    expect(screen.getByTestId('desktop-hub-modal')).toBeInTheDocument();
+    expect(screen.getByText('Audio DSP & Output Engine')).toBeInTheDocument();
+    expect(
+      screen.queryByText('Shake Phone to Skip Track'),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Spotify Sync' }));
+    expect(screen.getByText('Public Spotify Account Sync')).toBeInTheDocument();
   });
 });

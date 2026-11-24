@@ -5,7 +5,7 @@ import { persist } from 'zustand/middleware';
 import { pickArtwork, type Track } from '@nuclearplayer/model';
 
 import { useDownloadStore } from '../stores/downloadStore';
-import { useQueueStore } from '../stores/queueStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSoundStore } from '../stores/soundStore';
 import { haptic, initAndroidMediaBridge } from './androidMediaBridge';
@@ -13,10 +13,10 @@ import { triggerEndlessRadio } from './endlessRadio';
 import { httpHost } from './httpHost';
 import { initP2pSync } from './p2pSync';
 import { playbackManager } from './playback';
-import { type AmbientSpace, syncAmbientSoundSpace } from './soundSpaces';
+import { syncAmbientSoundSpace, type AmbientSpace } from './soundSpaces';
 import { useSpotifyAccountSyncStore } from './spotifyAccountSync';
-import { candidatesForTrack } from './streamResolution/candidateSource';
 import { hasFreshStream, streamingHost } from './streamingHost';
+import { candidatesForTrack } from './streamResolution/candidateSource';
 import { useWrappedStatsStore } from './wrappedStats';
 
 export type LrcLine = {
@@ -25,6 +25,7 @@ export type LrcLine = {
 };
 
 export type NowPlayingTab = 'player' | 'lyrics' | 'dsp' | 'queue';
+export type DesktopHubTab = 'spotify' | 'offline' | 'wrapped' | 'p2p' | 'dsp';
 
 export const EQ_FREQUENCIES = [60, 230, 910, 3600, 14000] as const;
 export const EQ_LABELS = ['60Hz', '230Hz', '910Hz', '3.6kHz', '14kHz'] as const;
@@ -36,13 +37,36 @@ export const EQ_PRESETS: Record<
   Flat: [0, 0, 0, 0, 0],
   'Bass Boost': [6, 4, 0, 1, 2],
   Vocal: [-2, 1, 5, 4, 1],
+  Acoustic: [2, 1, 2, 3, 2],
   Rock: [5, 3, -1, 3, 5],
   Electronic: [6, 3, 0, 2, 5],
+};
+
+export const shuffleRemainingQueue = (): void => {
+  const { items, currentIndex } = useQueueStore.getState();
+  if (items.length <= 1) {
+    return;
+  }
+  const copy = [...items];
+  const current =
+    currentIndex >= 0 && currentIndex < copy.length
+      ? copy.splice(currentIndex, 1)
+      : [];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  useQueueStore.setState({ items: [...current, ...copy], currentIndex: 0 });
+  toast.info('🔀 Shuffled upcoming queue');
 };
 
 type MobileEnhancementsState = {
   nowPlayingOpen: boolean;
   nowPlayingTab: NowPlayingTab;
+  desktopHubOpen: boolean;
+  desktopHubTab: DesktopHubTab;
+  desktopStreamPickerOpen: boolean;
+  sleepEndAt: number | null;
   oledBlackMode: boolean;
   sponsorBlockEnabled: boolean;
   preResolveEnabled: boolean;
@@ -74,6 +98,11 @@ type MobileEnhancementsState = {
 
   setNowPlayingOpen: (open: boolean) => void;
   setNowPlayingTab: (tab: NowPlayingTab) => void;
+  setDesktopHubOpen: (open: boolean) => void;
+  openDesktopHub: (tab?: DesktopHubTab) => void;
+  setDesktopStreamPickerOpen: (open: boolean) => void;
+  setSleepEndAt: (ts: number | null) => void;
+  cycleSleepTimer: () => void;
   setOledBlackMode: (enabled: boolean) => void;
   setSponsorBlockEnabled: (enabled: boolean) => void;
   setPreResolveEnabled: (enabled: boolean) => void;
@@ -103,9 +132,13 @@ type MobileEnhancementsState = {
 
 export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       nowPlayingOpen: false,
       nowPlayingTab: 'player',
+      desktopHubOpen: false,
+      desktopHubTab: 'spotify',
+      desktopStreamPickerOpen: false,
+      sleepEndAt: null,
       oledBlackMode: false,
       sponsorBlockEnabled: true,
       preResolveEnabled: true,
@@ -137,6 +170,34 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
 
       setNowPlayingOpen: (nowPlayingOpen) => set({ nowPlayingOpen }),
       setNowPlayingTab: (nowPlayingTab) => set({ nowPlayingTab }),
+      setDesktopHubOpen: (desktopHubOpen) => set({ desktopHubOpen }),
+      openDesktopHub: (tab) =>
+        set((s) => ({
+          desktopHubOpen: true,
+          desktopHubTab: tab ?? s.desktopHubTab,
+        })),
+      setDesktopStreamPickerOpen: (desktopStreamPickerOpen) =>
+        set({ desktopStreamPickerOpen }),
+      setSleepEndAt: (sleepEndAt) => set({ sleepEndAt }),
+      cycleSleepTimer: () => {
+        const presets = [15, 30, 45, 60];
+        const currentEnd = get().sleepEndAt;
+        if (!currentEnd) {
+          const mins = presets[0];
+          set({ sleepEndAt: Date.now() + mins * 60_000 });
+          toast.info(`🌙 Sleep timer: ${mins} min`);
+          return;
+        }
+        const rem = Math.ceil((currentEnd - Date.now()) / 60_000);
+        const next = presets.find((p) => p > rem + 2);
+        if (next) {
+          set({ sleepEndAt: Date.now() + next * 60_000 });
+          toast.info(`🌙 Sleep timer: ${next} min`);
+        } else {
+          set({ sleepEndAt: null });
+          toast.info('🌙 Sleep timer off');
+        }
+      },
       setOledBlackMode: (oledBlackMode) => set({ oledBlackMode }),
       setSponsorBlockEnabled: (sponsorBlockEnabled) =>
         set({ sponsorBlockEnabled }),
@@ -337,12 +398,9 @@ const fetchLyricsForTrack = async (track: Track) => {
   const title = track.title ?? '';
   try {
     const q = encodeURIComponent(`${artist} ${title}`.trim());
-    const resp = await httpHost.fetch(
-      `https://lrclib.net/api/search?q=${q}`,
-      {
-        headers: { 'User-Agent': 'NuclearPlayer/1.55.0' },
-      },
-    );
+    const resp = await httpHost.fetch(`https://lrclib.net/api/search?q=${q}`, {
+      headers: { 'User-Agent': 'NuclearPlayer/1.55.0' },
+    });
     if (resp.status === 200 && resp.body) {
       const results = JSON.parse(resp.body) as Array<{
         syncedLyrics?: string;
@@ -435,7 +493,9 @@ const preResolveUpcomingTracks = async () => {
     for (const nextItem of upcoming) {
       if (
         useDownloadStore.getState().isDownloaded(nextItem.track) ||
-        nextItem.track.streamCandidates?.some((c) => !c.failed && hasFreshStream(c))
+        nextItem.track.streamCandidates?.some(
+          (c) => !c.failed && hasFreshStream(c),
+        )
       ) {
         continue;
       }
@@ -570,7 +630,9 @@ const syncAudioElementDsp = () => {
           masterVolumeGain.gain.value = 1;
           return;
         }
-        const targetVol = audio.muted ? 0 : Math.max(0, Math.min(1, audio.volume));
+        const targetVol = audio.muted
+          ? 0
+          : Math.max(0, Math.min(1, audio.volume));
         masterVolumeGain.gain.setTargetAtTime(targetVol, ctx.currentTime, 0.02);
       };
       syncVol();
@@ -665,7 +727,9 @@ const syncAudioElementDsp = () => {
     if (isAndroidDevice()) {
       graph.masterVolumeGain.gain.value = 1;
     } else {
-      const targetVol = audio.muted ? 0 : Math.max(0, Math.min(1, audio.volume));
+      const targetVol = audio.muted
+        ? 0
+        : Math.max(0, Math.min(1, audio.volume));
       graph.masterVolumeGain.gain.setTargetAtTime(
         targetVol,
         graph.ctx.currentTime,
@@ -707,10 +771,14 @@ const syncMediaSessionMetadata = (track: Track) => {
       title: track.title,
       artist: track.artists?.map((a) => a.name).join(', ') || 'Unknown Artist',
       album: track.album?.title || 'Nuclear',
-      artwork: cover ? [{ src: cover, sizes: '512x512', type: 'image/jpeg' }] : [],
+      artwork: cover
+        ? [{ src: cover, sizes: '512x512', type: 'image/jpeg' }]
+        : [],
     });
 
-    navigator.mediaSession.setActionHandler('play', () => playbackManager.play());
+    navigator.mediaSession.setActionHandler('play', () =>
+      playbackManager.play(),
+    );
     navigator.mediaSession.setActionHandler('pause', () =>
       playbackManager.pause(),
     );
@@ -793,12 +861,12 @@ export const initMobileEnhancements = () => {
       syncMediaSessionMetadata(currentItem.track);
 
       const autoDownloadEnabled = Boolean(
-        useSettingsStore.getState().getValue('core.playback.autoDownloadPlayed'),
+        useSettingsStore
+          .getState()
+          .getValue('core.playback.autoDownloadPlayed'),
       );
       if (autoDownloadEnabled) {
-        void useDownloadStore
-          .getState()
-          .downloadTrack(currentItem.track, true);
+        void useDownloadStore.getState().downloadTrack(currentItem.track, true);
       }
     }
 
@@ -987,4 +1055,15 @@ export const initMobileEnhancements = () => {
 
   useMobileEnhancementsStore.subscribe(syncSideEffects);
   syncSideEffects(useMobileEnhancementsStore.getState());
+
+  if (typeof window !== 'undefined') {
+    window.setInterval(() => {
+      const endAt = useMobileEnhancementsStore.getState().sleepEndAt;
+      if (endAt && Date.now() >= endAt) {
+        playbackManager.pause();
+        useMobileEnhancementsStore.getState().setSleepEndAt(null);
+        toast.info('🌙 Sleep timer finished — playback paused');
+      }
+    }, 5000);
+  }
 };

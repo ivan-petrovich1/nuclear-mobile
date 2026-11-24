@@ -164,7 +164,7 @@ exports[`TrackTable > (Snapshot) Basic 1`] = `
                 </span>
               </th>
               <th
-                class="px-2 text-left cursor-pointer"
+                class="px-2 text-left w-[40%] cursor-pointer"
                 role="columnheader"
               >
                 <span
@@ -184,7 +184,7 @@ exports[`TrackTable > (Snapshot) Basic 1`] = `
                 </span>
               </th>
               <th
-                class="px-2 text-left cursor-pointer"
+                class="px-2 text-left w-24 cursor-pointer"
                 role="columnheader"
               >
                 <span
@@ -605,7 +605,7 @@ exports[`TrackTable > (Snapshot) DragAndDrop 1`] = `
                 </span>
               </th>
               <th
-                class="px-2 text-left cursor-pointer"
+                class="px-2 text-left w-[40%] cursor-pointer"
                 role="columnheader"
               >
                 <span
@@ -625,7 +625,7 @@ exports[`TrackTable > (Snapshot) DragAndDrop 1`] = `
                 </span>
               </th>
               <th
-                class="px-2 text-left cursor-pointer"
+                class="px-2 text-left w-24 cursor-pointer"
                 role="columnheader"
               >
                 <span
@@ -1221,7 +1221,7 @@ exports[`TrackTable > (Snapshot) Filtering 1`] = `
                 </span>
               </th>
               <th
-                class="px-2 text-left cursor-pointer"
+                class="px-2 text-left w-[40%] cursor-pointer"
                 role="columnheader"
               >
                 <span
@@ -1241,7 +1241,7 @@ exports[`TrackTable > (Snapshot) Filtering 1`] = `
                 </span>
               </th>
               <th
-                class="px-2 text-left cursor-pointer"
+                class="px-2 text-left w-24 cursor-pointer"
                 role="columnheader"
               >
                 <span
@@ -1823,7 +1823,7 @@ exports[`TrackTable > (Snapshot) LargeDataset 1`] = `
                   </span>
                 </th>
                 <th
-                  class="px-2 text-left cursor-pointer"
+                  class="px-2 text-left w-[40%] cursor-pointer"
                   role="columnheader"
                 >
                   <span
@@ -1843,7 +1843,7 @@ exports[`TrackTable > (Snapshot) LargeDataset 1`] = `
                   </span>
                 </th>
                 <th
-                  class="px-2 text-left cursor-pointer"
+                  class="px-2 text-left w-24 cursor-pointer"
                   role="columnheader"
                 >
                   <span
@@ -3671,7 +3671,7 @@ exports[`TrackTable > (Snapshot) Toolbar 1`] = `
                 </span>
               </th>
               <th
-                class="px-2 text-left cursor-pointer"
+                class="px-2 text-left w-[40%] cursor-pointer"
                 role="columnheader"
               >
                 <span
@@ -3691,7 +3691,7 @@ exports[`TrackTable > (Snapshot) Toolbar 1`] = `
                 </span>
               </th>
               <th
-                class="px-2 text-left cursor-pointer"
+                class="px-2 text-left w-24 cursor-pointer"
                 role="columnheader"
               >
                 <span

@@ -6,6 +6,7 @@ import {
   Flame,
   Heart,
   ListMusic,
+  Loader2,
   Music2,
   Play,
   Plus,
@@ -27,13 +28,13 @@ import { haptic } from '../../../services/androidMediaBridge';
 import { spinForgottenGem } from '../../../services/endlessRadio';
 import { useMobileEnhancementsStore } from '../../../services/mobileEnhancements';
 import {
-  type PersonalizedAlbumCard,
-  type PersonalizedArtistCard,
-  type PersonalizedMixCard,
   playOrSaveRecommendedMix,
   playRecommendedAlbum,
   playSimilarArtistMix,
   usePersonalizedFeedStore,
+  type PersonalizedAlbumCard,
+  type PersonalizedArtistCard,
+  type PersonalizedMixCard,
 } from '../../../services/personalizedFeed';
 import { playbackManager } from '../../../services/playback';
 import { commands } from '../../../services/tauri/bindings';
@@ -44,7 +45,7 @@ import {
 } from '../../../services/wrappedStats';
 import { useFavoritesStore } from '../../../stores/favoritesStore';
 import { usePlaylistStore } from '../../../stores/playlistStore';
-import { useQueueStore } from '../../../stores/queueStore';
+import { useQueueStore } from '../../../stores/queue/queueStore';
 
 const greetingForHour = (hour: number) => {
   if (hour >= 0 && hour < 5) {
@@ -111,6 +112,7 @@ export const PersonalizedDashboard: FC = () => {
   const feedLoading = usePersonalizedFeedStore((s) => s.loading);
   const refreshFeed = usePersonalizedFeedStore((s) => s.refreshFeed);
   const [historyTopTracks, setHistoryTopTracks] = useState<JumpBackItem[]>([]);
+  const [playingArtistId, setPlayingArtistId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!playlistsLoaded) {
@@ -134,21 +136,18 @@ export const PersonalizedDashboard: FC = () => {
   ]);
 
   useEffect(() => {
-    if (
-      import.meta.env.MODE === 'test' ||
-      Object.keys(trackStats).length > 0
-    ) {
+    if (import.meta.env.MODE === 'test' || Object.keys(trackStats).length > 0) {
       return;
     }
     let cancelled = false;
     void commands
       .historyTopTracks({ from: 0, to: Date.now() + 86_400_000 }, 8)
-      .then((res) => {
-        if (cancelled || res.status !== 'ok') {
+      .then((tracks) => {
+        if (cancelled || !Array.isArray(tracks)) {
           return;
         }
         setHistoryTopTracks(
-          res.data.map((t, idx) => ({
+          tracks.map((t, idx) => ({
             key: `hist-${idx}-${t.title}`,
             title: t.title,
             artist: t.artists.join(', ') || 'Unknown Artist',
@@ -262,11 +261,12 @@ export const PersonalizedDashboard: FC = () => {
       toast.info('Heart some songs first to shuffle your favorites!');
       return;
     }
-    const q = useQueueStore.getState();
-    q.clearQueue();
-    q.addToQueue(favoriteTracks.map((f) => f.ref));
-    q.shuffleQueue(true);
-    playbackManager.play();
+    const shuffled = favoriteTracks.map((f) => f.ref);
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    playbackManager.playTracks(shuffled);
     toast.success(`❤️ Shuffling ${favoriteTracks.length} favorite tracks`);
   };
 
@@ -282,10 +282,18 @@ export const PersonalizedDashboard: FC = () => {
   };
 
   const handlePlaySimilarArtist = async (artist: PersonalizedArtistCard) => {
+    if (playingArtistId === artist.id) {
+      return;
+    }
     haptic('medium');
-    const played = await playSimilarArtistMix(artist);
-    if (!played) {
-      void navigate({ to: '/search', search: { q: artist.name } });
+    setPlayingArtistId(artist.id);
+    try {
+      const played = await playSimilarArtistMix(artist);
+      if (!played) {
+        void navigate({ to: '/search', search: { q: artist.name } });
+      }
+    } finally {
+      setPlayingArtistId(null);
     }
   };
 
@@ -606,8 +614,9 @@ export const PersonalizedDashboard: FC = () => {
                 key={artist.id}
                 className="border-border bg-muted/70 flex w-36 shrink-0 flex-col gap-1.5 rounded-xl border p-2.5 text-left"
               >
-                <div className="bg-background relative aspect-square w-full overflow-hidden rounded-full">
+                <div className="relative aspect-square w-full">
                   <button
+                    type="button"
                     onClick={() => {
                       haptic('light');
                       void navigate({
@@ -615,7 +624,7 @@ export const PersonalizedDashboard: FC = () => {
                         search: { q: artist.name },
                       });
                     }}
-                    className="size-full"
+                    className="bg-background block size-full cursor-pointer overflow-hidden rounded-full"
                     aria-label={`Search ${artist.name}`}
                   >
                     {artist.imageUrl ? (
@@ -631,11 +640,20 @@ export const PersonalizedDashboard: FC = () => {
                     )}
                   </button>
                   <button
-                    onClick={() => void handlePlaySimilarArtist(artist)}
+                    type="button"
+                    disabled={playingArtistId === artist.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handlePlaySimilarArtist(artist);
+                    }}
                     aria-label={`Play ${artist.name}`}
-                    className="bg-primary text-primary-foreground absolute right-1 bottom-1 flex size-7 items-center justify-center rounded-full shadow transition active:scale-90"
+                    className="bg-primary text-primary-foreground ring-background/70 absolute right-0.5 bottom-0.5 z-10 flex size-8 cursor-pointer items-center justify-center rounded-full shadow-md ring-2 transition hover:scale-105 active:scale-90 disabled:opacity-70"
                   >
-                    <Play size={12} fill="currentColor" />
+                    {playingArtistId === artist.id ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <Play size={13} fill="currentColor" />
+                    )}
                   </button>
                 </div>
                 <button

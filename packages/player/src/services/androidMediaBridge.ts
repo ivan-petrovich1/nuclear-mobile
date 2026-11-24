@@ -1,7 +1,7 @@
 import type { Track } from '@nuclearplayer/model';
 import { pickArtwork } from '@nuclearplayer/model';
 
-import { useQueueStore } from '../stores/queueStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { getSetting } from '../stores/settingsStore';
 import { useSoundStore } from '../stores/soundStore';
 import { playbackManager } from './playback';

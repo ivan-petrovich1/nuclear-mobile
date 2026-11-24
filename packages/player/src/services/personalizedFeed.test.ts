@@ -5,6 +5,7 @@ import type { Track } from '@nuclearplayer/model';
 import { useDownloadStore } from '../stores/downloadStore';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlaylistStore } from '../stores/playlistStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { getSetting, useSettingsStore } from '../stores/settingsStore';
 import { resetInMemoryTauriStore } from '../test/utils/inMemoryTauriStore';
 import { registerBuiltInCoreSettings } from './coreSettings';
@@ -12,6 +13,7 @@ import { httpHost } from './httpHost';
 import {
   collectSeedProfile,
   normTrackKey,
+  playSimilarArtistMix,
   usePersonalizedFeedStore,
 } from './personalizedFeed';
 import { useWrappedStatsStore } from './wrappedStats';
@@ -69,7 +71,9 @@ describe('personalizedFeed & auto-download defaults', () => {
       },
     });
 
-    await useFavoritesStore.getState().addTrack(makeTrack('Gid', 'Ploho', 't1'));
+    await useFavoritesStore
+      .getState()
+      .addTrack(makeTrack('Gid', 'Ploho', 't1'));
 
     const profile = await collectSeedProfile();
 
@@ -125,35 +129,55 @@ describe('personalizedFeed & auto-download defaults', () => {
                 title: 'Sudno',
                 duration: 141,
                 artist: { id: 73228892, name: 'Molchat Doma' },
-                album: { id: 10, title: 'Etazhi', cover_medium: 'https://img.test/etazhi.jpg' },
+                album: {
+                  id: 10,
+                  title: 'Etazhi',
+                  cover_medium: 'https://img.test/etazhi.jpg',
+                },
               },
               {
                 id: 2,
                 title: 'Zakaz',
                 duration: 210,
                 artist: { id: 123, name: 'Ploho' },
-                album: { id: 11, title: 'Kuda', cover_medium: 'https://img.test/kuda.jpg' },
+                album: {
+                  id: 11,
+                  title: 'Kuda',
+                  cover_medium: 'https://img.test/kuda.jpg',
+                },
               },
               {
                 id: 3,
                 title: 'Toska',
                 duration: 190,
                 artist: { id: 73228892, name: 'Molchat Doma' },
-                album: { id: 10, title: 'Etazhi', cover_medium: 'https://img.test/etazhi.jpg' },
+                album: {
+                  id: 10,
+                  title: 'Etazhi',
+                  cover_medium: 'https://img.test/etazhi.jpg',
+                },
               },
               {
                 id: 4,
                 title: 'Tanz',
                 duration: 185,
                 artist: { id: 73228892, name: 'Molchat Doma' },
-                album: { id: 10, title: 'Etazhi', cover_medium: 'https://img.test/etazhi.jpg' },
+                album: {
+                  id: 10,
+                  title: 'Etazhi',
+                  cover_medium: 'https://img.test/etazhi.jpg',
+                },
               },
               {
                 id: 5,
                 title: 'Tishina',
                 duration: 200,
                 artist: { id: 73228892, name: 'Molchat Doma' },
-                album: { id: 10, title: 'Etazhi', cover_medium: 'https://img.test/etazhi.jpg' },
+                album: {
+                  id: 10,
+                  title: 'Etazhi',
+                  cover_medium: 'https://img.test/etazhi.jpg',
+                },
               },
             ],
           }),
@@ -252,5 +276,65 @@ describe('personalizedFeed & auto-download defaults', () => {
 
     await useDownloadStore.getState().clearAllDownloads();
     expect(Object.keys(useDownloadStore.getState().items)).toHaveLength(0);
+  });
+
+  it('plays similar artist top tracks via Deezer and falls back to iTunes when Deezer fails or ID is non-numeric', async () => {
+    vi.spyOn(httpHost, 'fetch').mockImplementation(async (url) => {
+      if (url.includes('/artist/42/top')) {
+        return {
+          status: 200,
+          headers: {},
+          body: JSON.stringify({
+            data: [
+              {
+                id: 777,
+                title: 'Kukushka',
+                duration: 320,
+                artist: { id: 42, name: 'Kino' },
+                album: { id: 9, title: 'Black Album' },
+              },
+            ],
+          }),
+        };
+      }
+      if (url.includes('itunes.apple.com/search')) {
+        return {
+          status: 200,
+          headers: {},
+          body: JSON.stringify({
+            results: [
+              {
+                trackId: 888,
+                trackName: 'Zakaz',
+                artistName: 'Ploho',
+                collectionName: 'Pyl',
+                trackTimeMillis: 210000,
+              },
+            ],
+          }),
+        };
+      }
+      return { status: 404, headers: {}, body: '' };
+    });
+
+    const okDeezer = await playSimilarArtistMix({
+      id: '42',
+      name: 'Kino',
+      reason: 'Seed',
+    });
+    expect(okDeezer).toBe(true);
+    expect(useQueueStore.getState().items.map((i) => i.track.title)).toEqual([
+      'Kukushka',
+    ]);
+
+    const okItunes = await playSimilarArtistMix({
+      id: 'deezer-fallback',
+      name: 'Ploho',
+      reason: 'Seed',
+    });
+    expect(okItunes).toBe(true);
+    expect(useQueueStore.getState().items.map((i) => i.track.title)).toEqual([
+      'Zakaz',
+    ]);
   });
 });

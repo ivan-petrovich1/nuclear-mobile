@@ -120,9 +120,27 @@ pub fn list_methods(domain: &str) -> Result<Value, String> {
                 "getLyricsForTrack"
             ]
         }),
+        "Navigation" => json!({
+            "domain": "Navigation",
+            "description": "Navigate the player UI like the browser history API: open a page, go back and forward, read the current location.",
+            "methods": [
+                "navigate",
+                "back",
+                "forward",
+                "current"
+            ]
+        }),
+        "Views" => json!({
+            "domain": "Views",
+            "description": "Adds views to the left sidebar of the player.",
+            "methods": [
+                "register",
+                "unregister"
+            ]
+        }),
         _ => {
             return Err(format!(
-                "Unknown domain: '{domain}'. Available domains: Queue, Playback, Metadata, Favorites, Playlists, Dashboard, Providers, Lyrics."
+                "Unknown domain: '{domain}'. Available domains: Queue, Playback, Metadata, Favorites, Playlists, Dashboard, Providers, Lyrics, Navigation, Views."
             ))
         }
     };
@@ -135,7 +153,7 @@ pub fn method_details(domain: &str, method: &str) -> Result<Value, String> {
         ("Queue", "getQueue") => json!({
             "domain": "Queue",
             "method": "getQueue",
-            "description": "Get the current queue state.",
+            "description": "Get the current queue state: the items, the current item, and the play order.",
             "params": [],
             "returns": "Queue"
         }),
@@ -688,6 +706,50 @@ pub fn method_details(domain: &str, method: &str) -> Result<Value, String> {
             "returns": "ProviderDescriptor | undefined"
         }),
 
+        ("Navigation", "navigate") => json!({
+            "domain": "Navigation",
+            "method": "navigate",
+            "description": "Open the page at a player route path, for example /dashboard, /search?q=radiohead, /artist/<providerId>/<artistId>, /album/<providerId>/<albumId>, /playlists/<playlistId>, /favorites/tracks, /history, /lyrics.",
+            "params": [{ "name": "path", "type": "string" }],
+            "returns": "void"
+        }),
+        ("Navigation", "back") => json!({
+            "domain": "Navigation",
+            "method": "back",
+            "description": "Go back one page in the navigation history.",
+            "params": [],
+            "returns": "void"
+        }),
+        ("Navigation", "forward") => json!({
+            "domain": "Navigation",
+            "method": "forward",
+            "description": "Go forward one page in the navigation history.",
+            "params": [],
+            "returns": "void"
+        }),
+        ("Navigation", "current") => json!({
+            "domain": "Navigation",
+            "method": "current",
+            "description": "Get the location of the page the user is looking at.",
+            "params": [],
+            "returns": "NavigationLocation"
+        }),
+
+        ("Views", "register") => json!({
+            "domain": "Views",
+            "method": "register",
+            "description": "Adds a view to the left sidebar. To replace a view, call register again with the same id. The view opens at /plugin/bridge/<viewId>. source is one TSX module. Set export on a route to the name of the export to show there. If export is not set, the default export shows. The props of each component are { params, api }. The module can import only react, @nuclearplayer/ui, and @nuclearplayer/plugin-sdk.",
+            "params": [{ "name": "view", "type": "RawViewDefinition" }],
+            "returns": "void"
+        }),
+        ("Views", "unregister") => json!({
+            "domain": "Views",
+            "method": "unregister",
+            "description": "Removes the view with this id. If the view is open, the dashboard opens.",
+            "params": [{ "name": "id", "type": "string" }],
+            "returns": "void"
+        }),
+
         _ => {
             let domain_check = list_methods(domain);
             match domain_check {
@@ -708,7 +770,7 @@ pub fn method_details(domain: &str, method: &str) -> Result<Value, String> {
                 }
                 Err(_) => {
                     return Err(format!(
-                        "Unknown domain: '{domain}'. Available domains: Queue, Playback, Metadata, Favorites, Playlists, Dashboard, Providers."
+                        "Unknown domain: '{domain}'. Available domains: Queue, Playback, Metadata, Favorites, Playlists, Dashboard, Providers, Lyrics, Navigation, Views."
                     ));
                 }
             }
@@ -862,8 +924,17 @@ pub fn describe_type(type_name: &str) -> Result<Value, String> {
             "type": "Queue",
             "description": "The playback queue state.",
             "fields": {
-                "items": { "type": "QueueItem[]" },
-                "currentIndex": { "type": "number" }
+                "items": { "type": "QueueItem[]", "description": "The items in the sequence that the user sees in the queue panel" },
+                "currentIndex": { "type": "number", "description": "Position of the current item in items" },
+                "playOrder": { "type": "PlayOrder" }
+            }
+        }),
+        "PlayOrder" => json!({
+            "type": "PlayOrder",
+            "description": "The sequence in which the queue items play. With shuffle off, this is the sequence of the queue items. With shuffle on, this is the shuffled sequence.",
+            "fields": {
+                "itemIds": { "type": "string[]", "description": "The IDs of all queue items, in the sequence in which they play" },
+                "currentIndex": { "type": "number", "description": "Position of the current item in itemIds. The items before it played. The items after it play next" }
             }
         }),
         "PlaylistRef" => json!({
@@ -1145,9 +1216,38 @@ pub fn describe_type(type_name: &str) -> Result<Value, String> {
                 "text": { "type": "string" }
             }
         }),
+        "NavigationLocation" => json!({
+            "type": "NavigationLocation",
+            "description": "The location of a page in the player, in the shape of the browser Location.",
+            "fields": {
+                "href": { "type": "string", "description": "Full path with search string, e.g. /search?q=radiohead" },
+                "pathname": { "type": "string", "description": "Path without search string, e.g. /search" },
+                "search": { "type": "Record<string, unknown>", "description": "Parsed search parameters, e.g. { \"q\": \"radiohead\" }" },
+                "hash": { "type": "string" }
+            }
+        }),
+        "RawViewDefinition" => json!({
+            "type": "RawViewDefinition",
+            "description": "A view for the left sidebar, as TSX source. Views.register gives the format of the source.",
+            "fields": {
+                "id": { "type": "string", "description": "ID of the view. The view opens at /plugin/bridge/<id>. To replace a view, call register again with the same id." },
+                "title": { "type": "string", "description": "Text of the sidebar entry." },
+                "icon": { "type": "string", "description": "Name of a Lucide icon, for example ChartBar." },
+                "source": { "type": "string", "description": "One TSX module with the components of all routes." },
+                "routes": { "type": "RawViewRoute[]" }
+            }
+        }),
+        "RawViewRoute" => json!({
+            "type": "RawViewRoute",
+            "description": "A page of a view.",
+            "fields": {
+                "path": { "type": "string", "description": "Path in the view, for example / or /track/$index. Start a segment with $ to make it a parameter." },
+                "export": { "type": "string", "optional": true, "description": "Name of the export to show on this route. If export is not set, the default export shows." }
+            }
+        }),
         _ => {
             return Err(format!(
-                "Unknown type: '{type_name}'. Available types: ProviderRef, ArtistCredit, Artwork, ArtworkSet, ArtistRef, AlbumRef, TrackRef, LocalFileInfo, Stream, StreamCandidate, Track, QueueItem, Queue, PlaylistRef, PlaylistItem, Playlist, PlaylistIndexEntry, PlaylistFolder, SearchParams, SearchResults, Album, ReleaseDate, ArtistBio, ArtistSocialStats, PlaybackState, FavoriteEntry, AttributedResult, StreamResolutionResult, ProviderDescriptor, YtdlpSearchResult, YtdlpStreamInfo, QueueItemStateUpdate, AttributedLyrics, Lyrics, LyricsMetadata, LyricsVocalist, LyricsSection, LyricsLine, LyricsSegment, LineAnnotation."
+                "Unknown type: '{type_name}'. Available types: ProviderRef, ArtistCredit, Artwork, ArtworkSet, ArtistRef, AlbumRef, TrackRef, LocalFileInfo, Stream, StreamCandidate, Track, QueueItem, Queue, PlayOrder, PlaylistRef, PlaylistItem, Playlist, PlaylistIndexEntry, PlaylistFolder, SearchParams, SearchResults, Album, ReleaseDate, ArtistBio, ArtistSocialStats, PlaybackState, FavoriteEntry, AttributedResult, StreamResolutionResult, ProviderDescriptor, YtdlpSearchResult, YtdlpStreamInfo, QueueItemStateUpdate, AttributedLyrics, Lyrics, LyricsMetadata, LyricsVocalist, LyricsSection, LyricsLine, LyricsSegment, LineAnnotation, NavigationLocation, RawViewDefinition, RawViewRoute."
             ))
         }
     };

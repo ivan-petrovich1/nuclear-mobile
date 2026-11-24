@@ -1,10 +1,13 @@
 import { act, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
 
+import { httpHost } from '../../services/httpHost';
 import { usePersonalizedFeedStore } from '../../services/personalizedFeed';
 import { useWrappedStatsStore } from '../../services/wrappedStats';
 import { useFavoritesStore } from '../../stores/favoritesStore';
 import { usePlaylistStore } from '../../stores/playlistStore';
+import { useQueueStore } from '../../stores/queue/queueStore';
 import { useStartupStore } from '../../stores/startupStore';
 import { DashboardWrapper } from './Dashboard.test-wrapper';
 
@@ -158,7 +161,9 @@ describe('Dashboard view (100% Personalized)', () => {
       screen.getByRole('heading', { name: 'Recommended for You' }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('heading', { name: 'Because You Listen to Molchat Doma' }),
+      screen.getByRole('heading', {
+        name: 'Because You Listen to Molchat Doma',
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole('heading', { name: 'Similar Artists' }),
@@ -172,5 +177,27 @@ describe('Dashboard view (100% Personalized)', () => {
     expect(
       screen.getByRole('heading', { name: 'Jump Back In' }),
     ).toBeInTheDocument();
+
+    const playArtistBtn = screen.getByRole('button', { name: 'Play Ploho' });
+    expect(playArtistBtn.parentElement).not.toHaveClass('overflow-hidden');
+    expect(playArtistBtn.parentElement).not.toHaveClass('rounded-full');
+
+    vi.spyOn(httpHost, 'fetch').mockResolvedValueOnce({
+      status: 200,
+      headers: {},
+      body: JSON.stringify({
+        data: [
+          {
+            id: 999,
+            title: 'Molodost',
+            duration: 185,
+            artist: { id: 123, name: 'Ploho' },
+          },
+        ],
+      }),
+    });
+
+    await userEvent.click(playArtistBtn);
+    expect(useQueueStore.getState().items[0]?.track.title).toBe('Molodost');
   });
 });

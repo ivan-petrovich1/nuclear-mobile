@@ -5,19 +5,23 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import {
-  hasSortableData,
-  rectSortingStrategy,
-  SortableContext,
-} from '@dnd-kit/sortable';
+import { hasSortableData, SortableContext } from '@dnd-kit/sortable';
 import { FC, ReactNode } from 'react';
 
 import { cn } from '../../utils';
 import { CardGridBase } from './CardGridBase';
+import {
+  dropIntoCollisionDetection,
+  dropTargetOf,
+  type CanDropInto,
+} from './dropIntoCollisionDetection';
+import { DropTargetContext, useDropTarget } from './useDropTarget';
 
 type SortableCardGridProps = {
   itemIds: string[];
   onReorder: (fromIndex: number, toIndex: number) => void;
+  canDropInto?: CanDropInto;
+  onDropInto?: (activeId: string, targetId: string) => void;
   disabled?: boolean;
   children?: ReactNode;
   className?: string;
@@ -26,6 +30,8 @@ type SortableCardGridProps = {
 export const SortableCardGrid: FC<SortableCardGridProps> = ({
   itemIds,
   onReorder,
+  canDropInto,
+  onDropInto,
   disabled = false,
   children,
   className,
@@ -33,8 +39,16 @@ export const SortableCardGrid: FC<SortableCardGridProps> = ({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
+  const { dropTargetId, sortingStrategy, updateDropTarget, endDrag } =
+    useDropTarget();
 
-  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+  const handleDragEnd = ({ active, over, collisions }: DragEndEvent) => {
+    endDrag();
+    const targetId = dropTargetOf(collisions);
+    if (targetId) {
+      onDropInto?.(String(active.id), targetId);
+      return;
+    }
     if (hasSortableData(active) && hasSortableData(over)) {
       onReorder(
         active.data.current.sortable.index,
@@ -44,15 +58,23 @@ export const SortableCardGrid: FC<SortableCardGridProps> = ({
   };
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={dropIntoCollisionDetection(canDropInto)}
+      onDragMove={updateDropTarget}
+      onDragEnd={handleDragEnd}
+      onDragCancel={endDrag}
+    >
       <SortableContext
         items={itemIds}
-        strategy={rectSortingStrategy}
+        strategy={sortingStrategy}
         disabled={disabled}
       >
-        <CardGridBase className={cn('gap-x-7 pl-3.5', className)}>
-          {children}
-        </CardGridBase>
+        <DropTargetContext.Provider value={dropTargetId}>
+          <CardGridBase className={cn('gap-x-7 pt-3 pl-3.5', className)}>
+            {children}
+          </CardGridBase>
+        </DropTargetContext.Provider>
       </SortableContext>
     </DndContext>
   );

@@ -9,6 +9,8 @@ import {
   MicVocalIcon,
   MusicIcon,
   SettingsIcon,
+  SlidersHorizontalIcon,
+  SparklesIcon,
   UserIcon,
 } from 'lucide-react';
 import { useEffect } from 'react';
@@ -32,6 +34,8 @@ import { ConnectedSettingsModal } from '../components/ConnectedSettingsModal';
 import { ConnectedStreamVerification } from '../components/ConnectedStreamVerification';
 import { ConnectedTitleBar } from '../components/ConnectedTitleBar';
 import { ConnectedTopBar } from '../components/ConnectedTopBar';
+import { CustomViewSidebarEntries } from '../components/CustomViewSidebarEntries';
+import { DesktopEnhancementsShell } from '../components/DesktopEnhancementsShell';
 import { DevTools } from '../components/DevTools';
 import { FlatpakWarningBanner } from '../components/FlatpakWarningBanner';
 import { MobileAndroidShell } from '../components/MobileAndroidShell';
@@ -56,6 +60,7 @@ const RootComponent = () => {
   } = useLayoutStore();
   const router = useRouter();
   const openSettings = useSettingsModalStore((state) => state.open);
+  const openDesktopHub = useMobileEnhancementsStore((s) => s.openDesktopHub);
   useStartupStore((state) => state.isStartingUp);
   useEffect(() => {
     if (
@@ -113,8 +118,9 @@ const RootComponent = () => {
       }
       return false;
     };
-    (window as unknown as { __NUCLEAR_BACK__?: () => boolean }).__NUCLEAR_BACK__ =
-      handleBack;
+    (
+      window as unknown as { __NUCLEAR_BACK__?: () => boolean }
+    ).__NUCLEAR_BACK__ = handleBack;
     return () => {
       delete (window as unknown as { __NUCLEAR_BACK__?: () => boolean })
         .__NUCLEAR_BACK__;
@@ -203,7 +209,18 @@ const RootComponent = () => {
                   icon={<CableIcon />}
                   label={t('sources')}
                 />
+                <CustomViewSidebarEntries />
               </div>
+              <SidebarNavigationItem
+                icon={<SparklesIcon />}
+                label="Nuclear Hub"
+                onClick={() => openDesktopHub('spotify')}
+              />
+              <SidebarNavigationItem
+                icon={<SlidersHorizontalIcon />}
+                label="Audio DSP"
+                onClick={() => openDesktopHub('dsp')}
+              />
               <SidebarNavigationItem
                 icon={<SettingsIcon />}
                 label={tPrefs('title')}
@@ -229,7 +246,14 @@ const RootComponent = () => {
         </PlayerWorkspace>
       </SoundProvider>
 
-      {isMobileEnv() ? <MobileAndroidShell /> : <ConnectedPlayerBar />}
+      {isMobileEnv() ? (
+        <MobileAndroidShell />
+      ) : (
+        <>
+          <DesktopEnhancementsShell />
+          <ConnectedPlayerBar />
+        </>
+      )}
       <Toaster />
       <ConnectedSettingsModal />
       <DevTools />

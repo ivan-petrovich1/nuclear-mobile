@@ -13,6 +13,7 @@ import type { Track } from '@nuclearplayer/model';
 import { Button, cn, Popover } from '@nuclearplayer/ui';
 
 import { useQueueActions } from '../../../hooks/useQueueActions';
+import { playbackManager } from '../../../services/playback';
 import {
   getTrackDownloadKey,
   useDownloadStore,
@@ -30,7 +31,7 @@ export const PlaylistActions: FC<PlaylistActionsProps> = ({
   className,
 }) => {
   const { t } = useTranslation('playlists');
-  const { addToQueue, playTracks } = useQueueActions();
+  const { addToQueue } = useQueueActions();
   const downloadedItems = useDownloadStore((state) => state.items);
   const isBatchDownloading = useDownloadStore(
     (state) => state.isBatchDownloading,
@@ -40,14 +41,16 @@ export const PlaylistActions: FC<PlaylistActionsProps> = ({
 
   const allDownloaded =
     tracks.length > 0 &&
-    tracks.every((track) => Boolean(downloadedItems[getTrackDownloadKey(track)]));
+    tracks.every((track) =>
+      Boolean(downloadedItems[getTrackDownloadKey(track)]),
+    );
 
   return (
     <div className={cn('flex flex-wrap items-center gap-2', className)}>
       <Button
         variant="tertiary"
         onClick={() => {
-          playTracks(tracks);
+          playbackManager.playTracks(tracks);
         }}
         data-testid="play-all-button"
       >

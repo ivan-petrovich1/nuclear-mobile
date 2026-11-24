@@ -15,7 +15,7 @@ import { useCanGoForward } from '../hooks/useCanGoForward';
 import { useCoreSetting } from '../hooks/useCoreSetting';
 import { useFramelessWindow } from '../hooks/useFramelessWindow';
 import { useLayoutStore } from '../stores/layoutStore';
-import { useQueueStore } from '../stores/queueStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { ConnectDevicesButton } from './ConnectDevicesButton';
 import { ConnectedThemeController } from './ConnectedThemeController';
 import { JamQrCodeButton } from './JamQrCodeButton';
@@ -38,9 +38,8 @@ export const ConnectedTopBar: FC = () => {
     typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
   const handleMobileBack = () => {
-    const backFn = (
-      window as unknown as { __NUCLEAR_BACK__?: () => boolean }
-    ).__NUCLEAR_BACK__;
+    const backFn = (window as unknown as { __NUCLEAR_BACK__?: () => boolean })
+      .__NUCLEAR_BACK__;
     if (backFn && backFn()) {
       return;
     }

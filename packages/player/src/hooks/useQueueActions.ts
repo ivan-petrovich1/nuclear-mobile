@@ -3,9 +3,7 @@ import { useShallow } from 'zustand/react/shallow';
 
 import type { Track } from '@nuclearplayer/model';
 
-import { playbackManager } from '../services/playback';
-import { useQueueStore } from '../stores/queueStore';
-import { getSetting } from '../stores/settingsStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 
 export const useQueueActions = () => {
   const {
@@ -16,6 +14,7 @@ export const useQueueActions = () => {
     removeByIndices,
     clearQueue,
     reorder,
+    moveBefore,
     updateItemState,
     selectCandidate,
     goToNext,
@@ -31,6 +30,7 @@ export const useQueueActions = () => {
       removeByIndices: state.removeByIndices,
       clearQueue: state.clearQueue,
       reorder: state.reorder,
+      moveBefore: state.moveBefore,
       updateItemState: state.updateItemState,
       selectCandidate: state.selectCandidate,
       goToNext: state.goToNext,
@@ -48,18 +48,6 @@ export const useQueueActions = () => {
     [clearQueue, addToQueue],
   );
 
-  const playTracks = useCallback(
-    (tracks: Track[]) => {
-      clearQueue();
-      addToQueue(tracks);
-      if (getSetting('core.playback.shuffle')) {
-        useQueueStore.getState().shuffleQueue(true);
-      }
-      playbackManager.play();
-    },
-    [clearQueue, addToQueue],
-  );
-
   return {
     addToQueue,
     addNext,
@@ -68,6 +56,7 @@ export const useQueueActions = () => {
     removeByIndices,
     clearQueue,
     reorder,
+    moveBefore,
     updateItemState,
     selectCandidate,
     goToNext,
@@ -75,6 +64,5 @@ export const useQueueActions = () => {
     goToIndex,
     goToId,
     playNow,
-    playTracks,
   };
 };

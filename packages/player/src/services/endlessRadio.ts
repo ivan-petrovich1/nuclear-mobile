@@ -4,7 +4,7 @@ import type { PlaylistIndexNode, Track } from '@nuclearplayer/model';
 
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlaylistStore } from '../stores/playlistStore';
-import { useQueueStore } from '../stores/queueStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { httpHost } from './httpHost';
 import { playbackManager } from './playback';
 import { useWrappedStatsStore } from './wrappedStats';
@@ -183,7 +183,8 @@ export const spinForgottenGem = async (): Promise<Track | null> => {
     })
     .sort((a, b) => a.plays - b.plays);
 
-  const candidates = ranked.length > 0 ? ranked : [{ track: allTracks[0], plays: 0 }];
+  const candidates =
+    ranked.length > 0 ? ranked : [{ track: allTracks[0], plays: 0 }];
   const sliceLen = Math.max(1, Math.ceil(candidates.length * 0.4));
   const chosen =
     candidates[Math.floor(Math.random() * sliceLen)]?.track ?? allTracks[0];

@@ -11,8 +11,7 @@ import { useQueueActions } from '../hooks/useQueueActions';
 import { useTrackActions } from '../hooks/useTrackActions';
 import { useTrackTableLabels } from '../hooks/useTrackTableLabels';
 import { playbackManager } from '../services/playback';
-import { useQueueStore } from '../stores/queueStore';
-import { getSetting } from '../stores/settingsStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { ConnectedTrackContextMenu } from './ConnectedTrackContextMenu';
 
 type ConnectedTrackTableProps = Omit<
@@ -44,9 +43,6 @@ export const ConnectedTrackTable: FC<ConnectedTrackTableProps> = (props) => {
           queueActions.clearQueue();
           queueActions.addToQueue(allTracks);
           useQueueStore.getState().goToIndex(idx);
-          if (getSetting('core.playback.shuffle')) {
-            useQueueStore.getState().shuffleQueue(false);
-          }
           playbackManager.play();
         },
         onPlayNext: trackActions.addNext,
@@ -54,7 +50,7 @@ export const ConnectedTrackTable: FC<ConnectedTrackTableProps> = (props) => {
         onRemove: externalActions?.onRemove,
         onReorder: externalActions?.onReorder,
         onPlayAll: () => {
-          queueActions.playTracks(restProps.tracks);
+          playbackManager.playTracks(restProps.tracks);
         },
         onAddAllToQueue: () => {
           queueActions.addToQueue(restProps.tracks);

@@ -1,5 +1,185 @@
 [
   {
+    "date": "2026-11-19T00:00",
+    "description": "Streaming plugins can now add mime type.",
+    "type": "fix",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Playback",
+        "color": "green"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-18T00:00",
+    "description": "Linux, MacOS, and Windows media controls.",
+    "type": "feature",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Integrations",
+        "color": "green"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-16T00:00",
+    "description": "MPD server improvements. Album art, volume controls, queue updates, and more.",
+    "type": "feature",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Integrations",
+        "color": "green"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-13T00:00",
+    "description": "Show Nuclear's name and icon in the volume mixer on Windows.",
+    "type": "fix",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Windows",
+        "color": "blue"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-13T00:00",
+    "description": "Shuffle without repeats.",
+    "type": "improvement",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Queue",
+        "color": "green"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-04T00:00",
+    "description": "Fix queue panel virtualization. Improves performance for large queues.",
+    "type": "fix",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Queue",
+        "color": "green"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-03T00:00",
+    "description": "Fix YouTube search returning no results for some queries.",
+    "type": "fix",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "YouTube",
+        "color": "red"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-03T00:00",
+    "description": "Fix tracks longer than about 1h30m failing to play with an unsupported format error.",
+    "type": "fix",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Playback",
+        "color": "green"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-03T00:00",
+    "description": "Give track titles more room in track tables and shrink the duration column.",
+    "type": "fix",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "UI",
+        "color": "blue"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-03T00:00",
+    "description": "Fix dragging playlists into folders.",
+    "type": "fix",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Playlists",
+        "color": "blue"
+      }
+    ]
+  },
+  {
+    "date": "2026-11-02T00:00",
+    "description": "Fix favorite albums and artists views slowing down on large libraries.",
+    "type": "fix",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Performance",
+        "color": "orange"
+      }
+    ]
+  },
+  {
+    "date": "2026-10-31T01:00",
+    "description": "New View API for plugins, HTTP API and MCP lets you create new custom views, listed in the left sidebar.",
+    "type": "feature",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Plugins",
+        "color": "purple"
+      }
+    ]
+  },
+  {
+    "date": "2026-10-31T00:00",
+    "description": "Navigation API for plugins.",
+    "type": "feature",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Integrations",
+        "color": "green"
+      }
+    ]
+  },
+  {
+    "date": "2026-10-30T04:00",
+    "description": "Fix yt-dlp client selection.",
+    "type": "fix",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "YouTube",
+        "color": "red"
+      }
+    ]
+  },
+  {
+    "date": "2026-10-30T03:00",
+    "description": "Now you can put playlists in folders by drag and drop.",
+    "type": "feature",
+    "contributors": ["nukeop"],
+    "tags": [
+      {
+        "label": "Playlists",
+        "color": "purple"
+      }
+    ]
+  },
+  {
     "date": "2026-10-30T00:00",
     "description": "Added integration features for playlist folders: HTTP API, MCP, and plugins can now access folders.",
     "type": "feature",

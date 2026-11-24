@@ -7,6 +7,8 @@ pub mod http;
 pub mod http_api;
 pub mod logging;
 pub mod mcp;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod media_controls;
 pub mod mpd;
 pub mod net;
 pub mod p2p_sync;
@@ -14,6 +16,8 @@ pub mod pagination;
 pub mod profile;
 mod setup;
 pub mod stream_server;
+#[cfg(windows)]
+mod win_mixer;
 pub mod ytdlp;
 pub mod ytdlp_setup;
 pub mod ytdlp_verify;
@@ -208,6 +212,8 @@ pub fn run() {
             seed_initial_user_data(app.handle());
             logging::mark_startup_complete();
             bridge::init_bridge(app.handle().clone());
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            media_controls::init_media_controls(app.handle().clone());
             mcp::init_mcp(app.handle().clone());
             mpd::init_mpd(app.handle().clone());
             http_api::init_http_api(app.handle().clone());
@@ -215,6 +221,9 @@ pub fn run() {
             p2p_sync::init_p2p_sync(app.handle().clone());
             discord::init_discord(app.handle().clone());
             history::init_history(app.handle().clone());
+
+            #[cfg(windows)]
+            win_mixer::init_win_mixer(app.handle().clone());
 
             #[cfg(target_os = "linux")]
             maximize_for_gamescope(app);

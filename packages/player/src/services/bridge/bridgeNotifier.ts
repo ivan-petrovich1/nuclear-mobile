@@ -1,16 +1,12 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import type { SoundStatus } from '@nuclearplayer/hifi';
-import type { SettingValue } from '@nuclearplayer/plugin-sdk';
 
-import { useQueueStore } from '../../stores/queueStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useQueueStore } from '../../stores/queue/queueStore';
 import { useSoundStore } from '../../stores/soundStore';
+import { eventBus } from '../eventBus';
+import { playbackSettings } from '../playbackSettings';
 import { BridgeCommand } from '../tauri/bridge';
-
-const VOLUME_SETTING = 'core.playback.volume';
-const REPEAT_SETTING = 'core.playback.repeat';
-const SHUFFLE_SETTING = 'core.playback.shuffle';
 
 const notifyPlayer = () =>
   void invoke(BridgeCommand.notify, { notification: { subsystem: 'player' } });
@@ -40,14 +36,32 @@ const watchSoundStatus = () => {
   });
 };
 
-const watchQueueIndex = () => {
-  let previousIndex: number = useQueueStore.getState().currentIndex;
+const watchPlaybackStart = () => {
+  let previousDuration = useSoundStore.getState().duration;
 
-  useQueueStore.subscribe((state) => {
-    if (state.currentIndex === previousIndex) {
+  useSoundStore.subscribe((state) => {
+    const started = previousDuration === 0 && state.duration > 0;
+    previousDuration = state.duration;
+    if (started) {
+      notifyPlayer();
+    }
+  });
+};
+
+const currentItemFingerprint = () => {
+  const { items, currentIndex } = useQueueStore.getState();
+  return `${currentIndex}:${items[currentIndex]?.id}`;
+};
+
+const watchCurrentItem = () => {
+  let previousFingerprint = currentItemFingerprint();
+
+  useQueueStore.subscribe(() => {
+    const fingerprint = currentItemFingerprint();
+    if (fingerprint === previousFingerprint) {
       return;
     }
-    previousIndex = state.currentIndex;
+    previousFingerprint = fingerprint;
     notifyPlayer();
   });
 };
@@ -71,44 +85,16 @@ const watchQueueContents = () => {
   });
 };
 
-const watchVolume = () => {
-  let previousVolume: SettingValue = useSettingsStore
-    .getState()
-    .getValue(VOLUME_SETTING);
-
-  useSettingsStore.subscribe((state) => {
-    const volume = state.getValue(VOLUME_SETTING);
-    if (volume === previousVolume) {
-      return;
-    }
-    previousVolume = volume;
-    notifyMixer();
-  });
-};
-
-const watchOptions = () => {
-  const getValues = () => ({
-    repeat: useSettingsStore.getState().getValue(REPEAT_SETTING),
-    shuffle: useSettingsStore.getState().getValue(SHUFFLE_SETTING),
-  });
-
-  let previous = getValues();
-
-  useSettingsStore.subscribe((state) => {
-    const repeat = state.getValue(REPEAT_SETTING);
-    const shuffle = state.getValue(SHUFFLE_SETTING);
-    if (repeat === previous.repeat && shuffle === previous.shuffle) {
-      return;
-    }
-    previous = { repeat, shuffle };
-    notifyOptions();
-  });
-};
-
 export const initBridgeNotifier = (): void => {
   watchSoundStatus();
-  watchQueueIndex();
+  watchPlaybackStart();
+  watchCurrentItem();
   watchQueueContents();
-  watchVolume();
-  watchOptions();
+  playbackSettings.onVolumeChange(notifyMixer);
+  playbackSettings.onRepeatModeChange(notifyOptions);
+  playbackSettings.onShuffleChange(notifyOptions);
+  eventBus.on('playbackSeeked', async () => notifyPlayer());
+  notifyPlayer();
+  notifyOptions();
+  notifyMixer();
 };

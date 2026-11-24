@@ -17,7 +17,7 @@ import type { FavoriteEntry } from '@nuclearplayer/plugin-sdk';
 
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlaylistStore } from '../stores/playlistStore';
-import { useQueueStore } from '../stores/queueStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSoundStore } from '../stores/soundStore';
 import { httpHost } from './httpHost';
@@ -64,13 +64,7 @@ export type RemotePlaybackState = {
 };
 
 export type RemoteControlAction =
-  | 'play'
-  | 'pause'
-  | 'toggle'
-  | 'next'
-  | 'previous'
-  | 'seek'
-  | 'volume';
+  'play' | 'pause' | 'toggle' | 'next' | 'previous' | 'seek' | 'volume';
 
 type P2pSyncStoreState = {
   enabled: boolean;
@@ -98,7 +92,10 @@ type P2pSyncStoreState = {
   syncWithPeer: (silent?: boolean) => Promise<void>;
   sendHandoffToPeer: (silent?: boolean) => Promise<void>;
   pullHandoffFromPeer: (silent?: boolean) => Promise<void>;
-  sendRemoteControl: (action: RemoteControlAction, value?: number) => Promise<void>;
+  sendRemoteControl: (
+    action: RemoteControlAction,
+    value?: number,
+  ) => Promise<void>;
 };
 
 const flattenPlaylistIds = (nodes: PlaylistIndexNode[]): string[] => {
@@ -178,7 +175,11 @@ const mergePlaylistItems = (
 
 export const mergeRemoteSnapshot = async (
   remote: SyncSnapshot,
-): Promise<{ playlistsAdded: number; playlistsMerged: number; favoritesAdded: number }> => {
+): Promise<{
+  playlistsAdded: number;
+  playlistsMerged: number;
+  favoritesAdded: number;
+}> => {
   const store = useP2pSyncStore.getState();
   const mergedDeleted: Record<string, string> = {
     ...store.deletedPlaylists,
@@ -189,7 +190,9 @@ export const mergeRemoteSnapshot = async (
   if (!plStore.loaded) {
     await plStore.loadIndex();
   }
-  const localIds = new Set(flattenPlaylistIds(usePlaylistStore.getState().index));
+  const localIds = new Set(
+    flattenPlaylistIds(usePlaylistStore.getState().index),
+  );
 
   let playlistsAdded = 0;
   let playlistsMerged = 0;
@@ -213,14 +216,13 @@ export const mergeRemoteSnapshot = async (
     }
 
     if (localIds.has(remotePl.id)) {
-      const localPl = await usePlaylistStore.getState().loadPlaylist(remotePl.id);
+      const localPl = await usePlaylistStore
+        .getState()
+        .loadPlaylist(remotePl.id);
       if (localPl) {
         const remoteNewer = remotePl.lastModifiedIso > localPl.lastModifiedIso;
         const mergedItems = mergePlaylistItems(localPl.items, remotePl.items);
-        if (
-          mergedItems.length !== localPl.items.length ||
-          remoteNewer
-        ) {
+        if (mergedItems.length !== localPl.items.length || remoteNewer) {
           const updated: Playlist = {
             ...localPl,
             name: remoteNewer ? remotePl.name : localPl.name,
@@ -421,8 +423,7 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
           deviceName: get().localInfo?.deviceName ?? 'Nuclear Peer',
           isPlaying: sound.status === 'playing',
           title: cur?.track.title ?? '',
-          artist:
-            cur?.track.artists?.map((a) => a.name).join(', ') || '',
+          artist: cur?.track.artists?.map((a) => a.name).join(', ') || '',
           coverUrl,
           seek: sound.seek,
           duration: sound.duration,
@@ -540,7 +541,9 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
               : null,
           }));
           if (!silent) {
-            toast.success(`🎧 Switched playback here: ${remote.title || 'Queue'}`);
+            toast.success(
+              `🎧 Switched playback here: ${remote.title || 'Queue'}`,
+            );
           }
         } catch (err) {
           if (!silent) {
@@ -648,7 +651,9 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
             void get().pollRemoteState();
           }, 500);
           if (!silent) {
-            toast.success(`🚀 Playing on your other device: "${cur.track.title}"`);
+            toast.success(
+              `🚀 Playing on your other device: "${cur.track.title}"`,
+            );
           }
         } catch (err) {
           if (!silent) {

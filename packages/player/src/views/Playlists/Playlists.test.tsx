@@ -12,7 +12,7 @@ import {
 import { PlayerBarWrapper } from '../../integration-tests/PlayerBar.test-wrapper';
 import { providersHost } from '../../services/providersHost';
 import { usePlaylistStore } from '../../stores/playlistStore';
-import { useQueueStore } from '../../stores/queueStore';
+import { useQueueStore } from '../../stores/queue/queueStore';
 import { PlaylistBuilder } from '../../test/builders/PlaylistBuilder';
 import { PlaylistFolderBuilder } from '../../test/builders/PlaylistFolderBuilder';
 import {
@@ -679,6 +679,43 @@ describe('Playlists view', () => {
         'Road Trip',
         'Late Night',
       ]);
+    });
+
+    it('moves a playlist into a folder when you drag it onto the folder', async () => {
+      PlaylistsWrapper.createPlaylists(roadTrip, lateNight, summer);
+
+      await PlaylistsWrapper.mount();
+      await PlaylistsWrapper.dragCard('Road Trip', 'Summer');
+
+      expect(PlaylistsWrapper.cardNames).toEqual(['Late Night', 'Summer']);
+      await PlaylistsWrapper.folder('Summer').open();
+      expect(PlaylistsWrapper.cardNames).toEqual([
+        'Beach',
+        'Pool',
+        'Road Trip',
+      ]);
+    });
+
+    it('puts a playlist in the place of a folder when you drop it on the edge of the folder', async () => {
+      PlaylistsWrapper.createPlaylists(summer, roadTrip);
+
+      await PlaylistsWrapper.mount();
+      await PlaylistsWrapper.dragCardToEdge('Road Trip', 'Summer');
+
+      expect(PlaylistsWrapper.cardNames).toEqual(['Road Trip', 'Summer']);
+      expect(PlaylistsWrapper.folder('Summer').subtitle).toBe('2 playlists');
+    });
+
+    it('reorders a folder when you drag it onto another folder', async () => {
+      PlaylistsWrapper.createPlaylists(
+        summer,
+        new PlaylistFolderBuilder().withName('Autumn'),
+      );
+
+      await PlaylistsWrapper.mount();
+      await PlaylistsWrapper.dragCard('Autumn', 'Summer');
+
+      expect(PlaylistsWrapper.cardNames).toEqual(['Autumn', 'Summer']);
     });
 
     it('reorders the playlists inside a folder', async () => {

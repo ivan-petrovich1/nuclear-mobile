@@ -5,7 +5,7 @@ import type { QueueItem, StreamCandidate } from '@nuclearplayer/model';
 import { stripResolutionState } from '@nuclearplayer/model';
 
 import { useDownloadStore } from '../../stores/downloadStore';
-import { useQueueStore } from '../../stores/queueStore';
+import { useQueueStore } from '../../stores/queue/queueStore';
 import { useSoundStore } from '../../stores/soundStore';
 import { playbackManager } from '../playback';
 import { hasActiveStreamingProvider, streamingHost } from '../streamingHost';
@@ -33,7 +33,9 @@ export class StreamResolution {
     updateItemState(item.id, { status: 'loading', error: undefined });
 
     // Check if track is downloaded locally for instant offline playback
-    const downloaded = useDownloadStore.getState().getDownloadedInfo(item.track);
+    const downloaded = useDownloadStore
+      .getState()
+      .getDownloadedInfo(item.track);
     if (downloaded) {
       try {
         const port = await invoke<number>('stream_server_port');

@@ -7,7 +7,6 @@ import {
   Disc,
   Download,
   FolderDown,
-  Gauge,
   Heart,
   Home,
   ListMusic,
@@ -20,7 +19,6 @@ import {
   RefreshCw,
   Repeat,
   Repeat1,
-  RotateCcw,
   Send,
   Share2,
   Shuffle,
@@ -44,14 +42,11 @@ import { useTrackActions } from '../hooks/useTrackActions';
 import { haptic } from '../services/androidMediaBridge';
 import { spinForgottenGem } from '../services/endlessRadio';
 import {
-  EQ_LABELS,
-  EQ_PRESETS,
+  shuffleRemainingQueue,
   useMobileEnhancementsStore,
 } from '../services/mobileEnhancements';
 import { useP2pSyncStore } from '../services/p2pSync';
 import { playbackManager } from '../services/playback';
-import type { AmbientSpace } from '../services/soundSpaces';
-import { useSpotifyAccountSyncStore } from '../services/spotifyAccountSync';
 import { resolveAllProviderCandidates } from '../services/streamingHost';
 import {
   shareTrackVibeCard,
@@ -62,17 +57,16 @@ import {
   computeListeningStreak,
   useWrappedStatsStore,
 } from '../services/wrappedStats';
-import {
-  getTrackDownloadKey,
-  useDownloadStore,
-} from '../stores/downloadStore';
+import { getTrackDownloadKey, useDownloadStore } from '../stores/downloadStore';
 import { usePlaylistStore } from '../stores/playlistStore';
-import { useQueueStore } from '../stores/queueStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { useSoundStore } from '../stores/soundStore';
 import { useUpdaterStore } from '../stores/updaterStore';
+import { AudioDspPanel } from './AudioDspPanel';
 import { BeatVisualizer } from './BeatVisualizer';
 import { FakeBankModal } from './FakeBankModal';
 import { P2pSyncPanel } from './P2pSyncPanel';
+import { SpotifyAccountSyncPanel } from './SpotifyAccountSyncPanel';
 
 const formatSeconds = (sec: number): string => {
   if (!Number.isFinite(sec) || sec < 0) {
@@ -110,7 +104,6 @@ export const MobileAndroidShell: FC = () => {
   const goToNext = useQueueStore((s) => s.goToNext);
   const goToPrevious = useQueueStore((s) => s.goToPrevious);
   const goToIndex = useQueueStore((s) => s.goToIndex);
-  const shuffleQueue = useQueueStore((s) => s.shuffleQueue);
   const clearQueue = useQueueStore((s) => s.clearQueue);
 
   const { status, seek: position, duration } = useSoundStore();
@@ -137,61 +130,35 @@ export const MobileAndroidShell: FC = () => {
   const {
     nowPlayingOpen,
     nowPlayingTab,
+    sleepEndAt,
     oledBlackMode,
     sponsorBlockEnabled,
     preResolveEnabled,
     playbackSpeed,
     preservePitch,
-    bassBoostDb,
-    loudnessBoostDb,
-    eqBands,
     dominantColor,
     syncedLyrics,
     plainLyrics,
     lyricsLoading,
     preResolvedIds,
-    ambientSpace,
-    ambientVolume,
-    spatial8dEnabled,
-    shakeToSkipEnabled,
-    shakeSensitivity,
     loopA,
     loopB,
     trackBookmarks,
     visualizerEnabled,
     karaokeEnabled,
-    crossfadeSeconds,
-    silenceTrimEnabled,
-    endlessRadioEnabled,
     setNowPlayingOpen,
     setNowPlayingTab,
+    cycleSleepTimer,
     setOledBlackMode,
     setSponsorBlockEnabled,
     setPreResolveEnabled,
-    setPlaybackSpeed,
-    setPreservePitch,
-    setBassBoostDb,
-    setLoudnessBoostDb,
-    setEqBand,
-    applyEqPreset,
-    resetDsp,
-    setAmbientSpace,
-    setAmbientVolume,
-    setSpatial8dEnabled,
-    setShakeToSkipEnabled,
-    setShakeSensitivity,
     setLoopA,
     setLoopB,
     clearLoop,
     setTrackBookmark,
-    setVisualizerEnabled,
     setKaraokeEnabled,
-    setCrossfadeSeconds,
-    setSilenceTrimEnabled,
-    setEndlessRadioEnabled,
   } = useMobileEnhancementsStore();
 
-  const spotifySync = useSpotifyAccountSyncStore();
   const wrappedStats = useWrappedStatsStore();
   const p2pPeerAddress = useP2pSyncStore((s) => s.peerAddress);
   const remoteState = useP2pSyncStore((s) => s.remoteState);
@@ -213,7 +180,6 @@ export const MobileAndroidShell: FC = () => {
   >('offline');
   const [vinylMode, setVinylMode] = useState(false);
   const [heartBurstKey, setHeartBurstKey] = useState(0);
-  const [sleepEndAt, setSleepEndAt] = useState<number | null>(null);
   const [sleepRemainingMin, setSleepRemainingMin] = useState<number | null>(
     null,
   );
@@ -241,15 +207,12 @@ export const MobileAndroidShell: FC = () => {
   const nextItem = queueItems[currentIndex + 1];
   const isNextPreResolved = Boolean(
     nextItem &&
-      (preResolvedIds[nextItem.id] ||
-        downloadedItems[getTrackDownloadKey(nextItem.track)]),
+    (preResolvedIds[nextItem.id] ||
+      downloadedItems[getTrackDownloadKey(nextItem.track)]),
   );
 
   const handleToggleShuffle = () => {
     haptic('light');
-    if (!shuffleEnabled) {
-      shuffleQueue(false);
-    }
     setShuffleEnabled(!shuffleEnabled);
   };
 
@@ -262,25 +225,7 @@ export const MobileAndroidShell: FC = () => {
 
   const handleCycleSleepTimer = () => {
     haptic('light');
-    const presets = [15, 30, 45, 60];
-    if (!sleepEndAt) {
-      const mins = presets[0];
-      setSleepEndAt(Date.now() + mins * 60_000);
-      setSleepRemainingMin(mins);
-      toast.info(`🌙 Sleep timer: ${mins} min`);
-      return;
-    }
-    const rem = Math.ceil((sleepEndAt - Date.now()) / 60_000);
-    const next = presets.find((p) => p > rem + 2);
-    if (next) {
-      setSleepEndAt(Date.now() + next * 60_000);
-      setSleepRemainingMin(next);
-      toast.info(`🌙 Sleep timer: ${next} min`);
-    } else {
-      setSleepEndAt(null);
-      setSleepRemainingMin(null);
-      toast.info('🌙 Sleep timer off');
-    }
+    cycleSleepTimer();
   };
 
   useEffect(() => {
@@ -290,14 +235,9 @@ export const MobileAndroidShell: FC = () => {
     }
     const tick = () => {
       const leftMs = sleepEndAt - Date.now();
-      if (leftMs <= 0) {
-        playbackManager.pause();
-        setSleepEndAt(null);
-        setSleepRemainingMin(null);
-        toast.info('🌙 Sleep timer finished — playback paused');
-        return;
-      }
-      setSleepRemainingMin(Math.max(1, Math.ceil(leftMs / 60_000)));
+      setSleepRemainingMin(
+        leftMs > 0 ? Math.max(1, Math.ceil(leftMs / 60_000)) : null,
+      );
     };
     tick();
     const id = window.setInterval(tick, 10_000);
@@ -451,7 +391,7 @@ export const MobileAndroidShell: FC = () => {
 
       {/* Swipeable Android Mini-Player + Bottom Navigation Bar */}
       <div
-        className="border-border z-20 flex w-full min-w-0 max-w-full shrink-0 flex-col overflow-hidden border-t"
+        className="border-border z-20 flex w-full max-w-full min-w-0 shrink-0 flex-col overflow-hidden border-t"
         style={{
           backgroundColor: oledBlackMode ? '#000000' : 'var(--muted)',
         }}
@@ -481,7 +421,7 @@ export const MobileAndroidShell: FC = () => {
         )}
         {/* Live PC Remote Control Bar (shows when PC is playing & phone is idle) */}
         {remoteState?.isPlaying && !isPlaying && (
-          <div className="border-border/50 bg-emerald-500/15 flex items-center justify-between gap-2 border-b px-3 py-1.5 text-xs">
+          <div className="border-border/50 flex items-center justify-between gap-2 border-b bg-emerald-500/15 px-3 py-1.5 text-xs">
             <div className="min-w-0 flex-1">
               <div className="truncate font-extrabold text-emerald-300">
                 💻 {remoteState.deviceName}: {remoteState.title || 'Playing'}
@@ -584,11 +524,7 @@ export const MobileAndroidShell: FC = () => {
 
             <div className="border-border bg-background relative size-10 shrink-0 overflow-hidden rounded-md border">
               {coverUrl ? (
-                <img
-                  src={coverUrl}
-                  alt=""
-                  className="size-full object-cover"
-                />
+                <img src={coverUrl} alt="" className="size-full object-cover" />
               ) : (
                 <div className="flex size-full items-center justify-center">
                   <Music2 size={18} />
@@ -607,7 +543,7 @@ export const MobileAndroidShell: FC = () => {
                   {track.title}
                 </span>
                 {isTrackDownloaded && (
-                  <span className="rounded bg-emerald-500/20 px-1 py-0.2 text-[9px] font-bold text-emerald-400">
+                  <span className="py-0.2 rounded bg-emerald-500/20 px-1 text-[9px] font-bold text-emerald-400">
                     OFFLINE
                   </span>
                 )}
@@ -830,83 +766,8 @@ export const MobileAndroidShell: FC = () => {
           )}
 
           {hubTab === 'spotify' && (
-            <div className="flex-1 space-y-4 overflow-y-auto p-4">
-              <div className="border-border space-y-3 rounded-xl border p-4">
-                <div className="flex items-center gap-2">
-                  <RefreshCw
-                    size={18}
-                    className={spotifySync.syncing ? 'animate-spin' : ''}
-                  />
-                  <div>
-                    <h3 className="text-sm font-extrabold">
-                      Public Spotify Account Sync
-                    </h3>
-                    <p className="text-[11px] opacity-70">
-                      No login needed. Paste your public Spotify profile link or
-                      username — Nuclear checks all public playlists on that
-                      account and keeps them updated automatically.
-                    </p>
-                  </div>
-                </div>
-
-                <input
-                  type="text"
-                  value={spotifySync.accountInput}
-                  onChange={(e) => spotifySync.setAccountInput(e.target.value)}
-                  placeholder="https://open.spotify.com/user/... or username"
-                  className="border-border bg-input text-input-foreground w-full rounded-lg border px-3 py-2 text-xs"
-                />
-
-                <label className="flex items-center justify-between text-xs font-semibold">
-                  <span>🔄 Auto-sync public playlists on app launch</span>
-                  <input
-                    type="checkbox"
-                    checked={spotifySync.autoSyncOnLaunch}
-                    onChange={(e) =>
-                      spotifySync.setAutoSyncOnLaunch(e.target.checked)
-                    }
-                  />
-                </label>
-
-                <button
-                  disabled={spotifySync.syncing}
-                  onClick={() => {
-                    haptic('medium');
-                    void spotifySync.syncNow(false);
-                  }}
-                  className="bg-primary text-primary-foreground flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-extrabold shadow transition active:scale-95 disabled:opacity-60"
-                >
-                  {spotifySync.syncing ? (
-                    <Loader2 size={15} className="animate-spin" />
-                  ) : (
-                    <RefreshCw size={15} />
-                  )}
-                  <span>
-                    {spotifySync.syncing
-                      ? 'Checking Spotify profile...'
-                      : 'Sync Public Playlists Now'}
-                  </span>
-                </button>
-
-                {spotifySync.lastSummary && (
-                  <div className="rounded-lg bg-black/15 px-3 py-2 text-[11px]">
-                    <div className="font-bold">{spotifySync.lastSummary}</div>
-                    {spotifySync.lastSyncedIso && (
-                      <div className="opacity-65">
-                        Last synced:{' '}
-                        {new Date(spotifySync.lastSyncedIso).toLocaleString()}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div className="border-border rounded-xl border p-3 text-[11px] opacity-75">
-                <strong>Tip:</strong> Make sure your playlists on Spotify are
-                set to <em>Public</em> and visible on your profile. Whenever you
-                add or remove songs on Spotify, just open Nuclear (or tap Sync
-                Now) and your playlists update in-place!
-              </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <SpotifyAccountSyncPanel />
             </div>
           )}
 
@@ -1027,208 +888,210 @@ export const MobileAndroidShell: FC = () => {
             })()}
 
           {hubTab === 'offline' && (
-          <div className="flex-1 space-y-4 overflow-y-auto p-4">
-            {window.NuclearAndroid?.isIgnoringBatteryOptimizations &&
-              !window.NuclearAndroid.isIgnoringBatteryOptimizations() && (
-                <button
-                  onClick={() => {
-                    haptic('medium');
-                    window.NuclearAndroid?.requestIgnoreBatteryOptimizations?.();
-                  }}
-                  className="flex w-full items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3.5 py-2.5 text-left text-xs text-amber-200 transition active:scale-95"
-                >
-                  <div>
-                    <div className="font-extrabold">
-                      ⚡ Fix Background Playback Stopping
-                    </div>
-                    <div className="text-[11px] opacity-85">
-                      Tap to allow Unrestricted battery so Android never freezes
-                      Nuclear when the screen is off.
-                    </div>
-                  </div>
-                  <Zap size={18} className="shrink-0 text-amber-400" />
-                </button>
-              )}
-            {/* Quick Actions: Forgotten Gem Roulette, Local Files, Backup Export/Import */}
-            <button
-              className="bg-primary text-primary-foreground flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-extrabold shadow transition active:scale-95"
-              onClick={() => {
-                haptic('heavy');
-                void spinForgottenGem().then((picked) => {
-                  if (picked) {
-                    setOfflineDrawerOpen(false);
-                  }
-                });
-              }}
-            >
-              <Dices size={16} />
-              <span>🎲 Spin Forgotten Gem Roulette</span>
-            </button>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                className="border-border surface-card flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-bold"
-                onClick={() => localAudioInputRef.current?.click()}
-              >
-                <Disc size={16} />
-                <span>Play Local Audio Files</span>
-              </button>
-              <button
-                className="border-border surface-card flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-bold"
-                onClick={() =>
-                  void downloadTracks(queueItems.map((i) => i.track))
-                }
-              >
-                <Download size={16} />
-                <span>Download Full Queue</span>
-              </button>
-              <button
-                className="border-border surface-card flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-bold"
-                onClick={handleExportBackup}
-              >
-                <FolderDown size={16} />
-                <span>Export Desktop Backup</span>
-              </button>
-              <button
-                className="border-border surface-card flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-bold"
-                onClick={() => backupInputRef.current?.click()}
-              >
-                <Upload size={16} />
-                <span>Import Backup JSON</span>
-              </button>
-            </div>
-
-            {/* Smart Toggles */}
-            <div className="border-border space-y-2 rounded-lg border p-3">
-              <label className="flex items-center justify-between text-xs font-semibold">
-                <span>
-                  ⚡ Smart Stream Pre-Resolving (0ms track transitions)
-                </span>
-                <input
-                  type="checkbox"
-                  checked={preResolveEnabled}
-                  onChange={(e) => setPreResolveEnabled(e.target.checked)}
-                />
-              </label>
-              <label className="flex items-center justify-between text-xs font-semibold">
-                <span>
-                  📥 Auto-download played songs (off by default to save space)
-                </span>
-                <input
-                  type="checkbox"
-                  checked={Boolean(autoDownloadPlayed)}
-                  onChange={(e) => {
-                    haptic('light');
-                    void setAutoDownloadPlayed(e.target.checked);
-                  }}
-                />
-              </label>
-              <label className="flex items-center justify-between text-xs font-semibold">
-                <span>📂 Export copy to Downloads/Nuclear folder</span>
-                <input
-                  type="checkbox"
-                  checked={Boolean(exportDownloadsToPublic)}
-                  onChange={(e) => {
-                    haptic('light');
-                    void setExportDownloadsToPublic(e.target.checked);
-                  }}
-                />
-              </label>
-              <label className="flex items-center justify-between text-xs font-semibold">
-                <span>⏭ SponsorBlock (auto-skip non-music intros/outros)</span>
-                <input
-                  type="checkbox"
-                  checked={sponsorBlockEnabled}
-                  onChange={(e) => setSponsorBlockEnabled(e.target.checked)}
-                />
-              </label>
-              <label className="flex items-center justify-between text-xs font-semibold">
-                <span>🌑 True OLED Black Mode (#000000 AMOLED)</span>
-                <input
-                  type="checkbox"
-                  checked={oledBlackMode}
-                  onChange={(e) => setOledBlackMode(e.target.checked)}
-                />
-              </label>
-            </div>
-
-            {/* Downloaded Songs List */}
-            <div>
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <h3 className="text-sm font-bold">
-                  Downloaded Songs ({Object.keys(downloadedItems).length})
-                  {exportDownloadsToPublic
-                    ? ' — Saved in App & Downloads/Nuclear/'
-                    : ' — Offline App Cache'}
-                </h3>
-                {Object.keys(downloadedItems).length > 0 && (
+            <div className="flex-1 space-y-4 overflow-y-auto p-4">
+              {window.NuclearAndroid?.isIgnoringBatteryOptimizations &&
+                !window.NuclearAndroid.isIgnoringBatteryOptimizations() && (
                   <button
                     onClick={() => {
                       haptic('medium');
-                      void clearAllDownloads();
+                      window.NuclearAndroid?.requestIgnoreBatteryOptimizations?.();
                     }}
-                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-[11px] font-bold text-rose-400 active:scale-95"
+                    className="flex w-full items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3.5 py-2.5 text-left text-xs text-amber-200 transition active:scale-95"
                   >
-                    <Trash2 size={12} /> Clear All
+                    <div>
+                      <div className="font-extrabold">
+                        ⚡ Fix Background Playback Stopping
+                      </div>
+                      <div className="text-[11px] opacity-85">
+                        Tap to allow Unrestricted battery so Android never
+                        freezes Nuclear when the screen is off.
+                      </div>
+                    </div>
+                    <Zap size={18} className="shrink-0 text-amber-400" />
                   </button>
                 )}
+              {/* Quick Actions: Forgotten Gem Roulette, Local Files, Backup Export/Import */}
+              <button
+                className="bg-primary text-primary-foreground flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-extrabold shadow transition active:scale-95"
+                onClick={() => {
+                  haptic('heavy');
+                  void spinForgottenGem().then((picked) => {
+                    if (picked) {
+                      setOfflineDrawerOpen(false);
+                    }
+                  });
+                }}
+              >
+                <Dices size={16} />
+                <span>🎲 Spin Forgotten Gem Roulette</span>
+              </button>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  className="border-border surface-card flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-bold"
+                  onClick={() => localAudioInputRef.current?.click()}
+                >
+                  <Disc size={16} />
+                  <span>Play Local Audio Files</span>
+                </button>
+                <button
+                  className="border-border surface-card flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-bold"
+                  onClick={() =>
+                    void downloadTracks(queueItems.map((i) => i.track))
+                  }
+                >
+                  <Download size={16} />
+                  <span>Download Full Queue</span>
+                </button>
+                <button
+                  className="border-border surface-card flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-bold"
+                  onClick={handleExportBackup}
+                >
+                  <FolderDown size={16} />
+                  <span>Export Desktop Backup</span>
+                </button>
+                <button
+                  className="border-border surface-card flex items-center justify-center gap-2 rounded-lg border p-2.5 text-xs font-bold"
+                  onClick={() => backupInputRef.current?.click()}
+                >
+                  <Upload size={16} />
+                  <span>Import Backup JSON</span>
+                </button>
               </div>
-              {Object.values(downloadedItems).length === 0 ? (
-                <div className="border-border rounded-lg border p-6 text-center text-xs opacity-70">
-                  No offline songs downloaded yet. Tap the <strong>Download</strong>{' '}
-                  button on any song, playlist, or the Mini-Player to save songs
-                  for 100% offline playback!
+
+              {/* Smart Toggles */}
+              <div className="border-border space-y-2 rounded-lg border p-3">
+                <label className="flex items-center justify-between text-xs font-semibold">
+                  <span>
+                    ⚡ Smart Stream Pre-Resolving (0ms track transitions)
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={preResolveEnabled}
+                    onChange={(e) => setPreResolveEnabled(e.target.checked)}
+                  />
+                </label>
+                <label className="flex items-center justify-between text-xs font-semibold">
+                  <span>
+                    📥 Auto-download played songs (off by default to save space)
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(autoDownloadPlayed)}
+                    onChange={(e) => {
+                      haptic('light');
+                      void setAutoDownloadPlayed(e.target.checked);
+                    }}
+                  />
+                </label>
+                <label className="flex items-center justify-between text-xs font-semibold">
+                  <span>📂 Export copy to Downloads/Nuclear folder</span>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(exportDownloadsToPublic)}
+                    onChange={(e) => {
+                      haptic('light');
+                      void setExportDownloadsToPublic(e.target.checked);
+                    }}
+                  />
+                </label>
+                <label className="flex items-center justify-between text-xs font-semibold">
+                  <span>
+                    ⏭ SponsorBlock (auto-skip non-music intros/outros)
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={sponsorBlockEnabled}
+                    onChange={(e) => setSponsorBlockEnabled(e.target.checked)}
+                  />
+                </label>
+                <label className="flex items-center justify-between text-xs font-semibold">
+                  <span>🌑 True OLED Black Mode (#000000 AMOLED)</span>
+                  <input
+                    type="checkbox"
+                    checked={oledBlackMode}
+                    onChange={(e) => setOledBlackMode(e.target.checked)}
+                  />
+                </label>
+              </div>
+
+              {/* Downloaded Songs List */}
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold">
+                    Downloaded Songs ({Object.keys(downloadedItems).length})
+                    {exportDownloadsToPublic
+                      ? ' — Saved in App & Downloads/Nuclear/'
+                      : ' — Offline App Cache'}
+                  </h3>
+                  {Object.keys(downloadedItems).length > 0 && (
+                    <button
+                      onClick={() => {
+                        haptic('medium');
+                        void clearAllDownloads();
+                      }}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/15 px-2.5 py-1 text-[11px] font-bold text-rose-400 active:scale-95"
+                    >
+                      <Trash2 size={12} /> Clear All
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {Object.values(downloadedItems).map((item) => {
-                    const synthTrack: Track = {
-                      title: item.title,
-                      artists: [
-                        {
-                          name: item.artist,
-                          roles: [],
-                          source: { provider: 'offline', id: item.key },
-                        },
-                      ],
-                      durationMs: item.durationMs,
-                      source: { provider: 'offline', id: item.key },
-                    };
-                    return (
-                      <div
-                        key={item.key}
-                        className="border-border flex items-center justify-between rounded-lg border px-3 py-2"
-                      >
-                        <button
-                          className="min-w-0 flex-1 text-left"
-                          onClick={() => {
-                            useQueueStore.getState().clearQueue();
-                            useQueueStore.getState().addToQueue([synthTrack]);
-                            playbackManager.play();
-                            setOfflineDrawerOpen(false);
-                          }}
+                {Object.values(downloadedItems).length === 0 ? (
+                  <div className="border-border rounded-lg border p-6 text-center text-xs opacity-70">
+                    No offline songs downloaded yet. Tap the{' '}
+                    <strong>Download</strong> button on any song, playlist, or
+                    the Mini-Player to save songs for 100% offline playback!
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {Object.values(downloadedItems).map((item) => {
+                      const synthTrack: Track = {
+                        title: item.title,
+                        artists: [
+                          {
+                            name: item.artist,
+                            roles: [],
+                            source: { provider: 'offline', id: item.key },
+                          },
+                        ],
+                        durationMs: item.durationMs,
+                        source: { provider: 'offline', id: item.key },
+                      };
+                      return (
+                        <div
+                          key={item.key}
+                          className="border-border flex items-center justify-between rounded-lg border px-3 py-2"
                         >
-                          <div className="truncate text-xs font-bold">
-                            {item.title}
-                          </div>
-                          <div className="truncate text-[11px] opacity-70">
-                            {item.artist} • {item.container?.toUpperCase()}
-                          </div>
-                        </button>
-                        <button
-                          className="p-1.5 opacity-70 hover:opacity-100"
-                          onClick={() => void removeDownload(synthTrack)}
-                          aria-label="Remove download"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+                          <button
+                            className="min-w-0 flex-1 text-left"
+                            onClick={() => {
+                              useQueueStore.getState().clearQueue();
+                              useQueueStore.getState().addToQueue([synthTrack]);
+                              playbackManager.play();
+                              setOfflineDrawerOpen(false);
+                            }}
+                          >
+                            <div className="truncate text-xs font-bold">
+                              {item.title}
+                            </div>
+                            <div className="truncate text-[11px] opacity-70">
+                              {item.artist} • {item.container?.toUpperCase()}
+                            </div>
+                          </button>
+                          <button
+                            className="p-1.5 opacity-70 hover:opacity-100"
+                            onClick={() => void removeDownload(synthTrack)}
+                            aria-label="Remove download"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
           )}
         </div>
       )}
@@ -1256,7 +1119,8 @@ export const MobileAndroidShell: FC = () => {
               if (!sheetTouchStartRef.current) {
                 return;
               }
-              const dy = e.changedTouches[0].clientY - sheetTouchStartRef.current.y;
+              const dy =
+                e.changedTouches[0].clientY - sheetTouchStartRef.current.y;
               sheetTouchStartRef.current = null;
               if (dy > 45) {
                 haptic('light');
@@ -1418,7 +1282,9 @@ export const MobileAndroidShell: FC = () => {
                         ? 'bg-primary text-primary-foreground'
                         : 'bg-black/55 text-white'
                     }`}
-                    title={vinylMode ? 'Switch to Cover Art' : 'Spinning Vinyl Mode'}
+                    title={
+                      vinylMode ? 'Switch to Cover Art' : 'Spinning Vinyl Mode'
+                    }
                     aria-label="Toggle Vinyl Mode"
                   >
                     <Disc
@@ -1584,7 +1450,9 @@ export const MobileAndroidShell: FC = () => {
                           onClick={() => {
                             haptic('light');
                             setLoopA(position);
-                            toast.info(`Loop A set at ${formatSeconds(position)}`);
+                            toast.info(
+                              `Loop A set at ${formatSeconds(position)}`,
+                            );
                           }}
                           className={`rounded-full px-2.5 py-1 transition active:scale-95 ${
                             loopA !== null
@@ -1633,7 +1501,9 @@ export const MobileAndroidShell: FC = () => {
                       </div>
 
                       {(() => {
-                        const savedDrop = dlKey ? trackBookmarks[dlKey] : undefined;
+                        const savedDrop = dlKey
+                          ? trackBookmarks[dlKey]
+                          : undefined;
                         return (
                           <div className="flex items-center gap-1">
                             {savedDrop !== undefined ? (
@@ -1841,7 +1711,7 @@ export const MobileAndroidShell: FC = () => {
                   })}
                 </div>
               ) : plainLyrics ? (
-                <pre className=" font-sans text-sm leading-relaxed whitespace-pre-wrap opacity-90">
+                <pre className="font-sans text-sm leading-relaxed whitespace-pre-wrap opacity-90">
                   {plainLyrics}
                 </pre>
               ) : (
@@ -1861,401 +1731,8 @@ export const MobileAndroidShell: FC = () => {
 
           {/* TAB 3: AUDIO DSP, EQUALIZER, SPEED/PITCH & SPONSORBLOCK */}
           {nowPlayingTab === 'dsp' && (
-            <div className="flex-1 space-y-4 overflow-y-auto px-5 py-3">
-              <div className="flex items-center justify-between">
-                <span className="flex items-center gap-1.5 text-sm font-extrabold">
-                  <Sliders size={16} /> Audio DSP & Output Engine
-                </span>
-                <button
-                  className="flex items-center gap-1 rounded-md bg-black/25 px-2.5 py-1 text-xs font-bold"
-                  onClick={resetDsp}
-                >
-                  <RotateCcw size={13} /> Reset DSP
-                </button>
-              </div>
-
-              {/* 1-Tap Fun Mood Mixes */}
-              <div className="rounded-xl bg-black/25 p-3">
-                <div className="mb-2 text-xs font-bold">
-                  ✨ 1-Tap Mood Mixes
-                </div>
-                <div className="grid grid-cols-2 gap-1.5 text-xs font-bold">
-                  <button
-                    onClick={() => {
-                      haptic('medium');
-                      setPlaybackSpeed(0.85);
-                      setPreservePitch(false);
-                      setAmbientSpace('rain');
-                      setAmbientVolume(0.35);
-                      setBassBoostDb(3);
-                      toast.info('🌙 Late Night Chill activated');
-                    }}
-                    className="rounded-lg bg-black/30 px-2.5 py-2 text-left transition active:scale-95"
-                  >
-                    🌙 Late Night Chill
-                    <div className="text-[10px] font-normal opacity-70">
-                      Slowed + Rain + Warm Bass
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => {
-                      haptic('medium');
-                      setPlaybackSpeed(1.0);
-                      setPreservePitch(true);
-                      setAmbientSpace('off');
-                      setBassBoostDb(8);
-                      setLoudnessBoostDb(4);
-                      applyEqPreset('Bass Boost');
-                      toast.info('🏋️ Gym Hype activated');
-                    }}
-                    className="rounded-lg bg-black/30 px-2.5 py-2 text-left transition active:scale-95"
-                  >
-                    🏋️ Gym Hype
-                    <div className="text-[10px] font-normal opacity-70">
-                      Max Bass + Loudness Punch
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => {
-                      haptic('medium');
-                      setPlaybackSpeed(1.0);
-                      setPreservePitch(true);
-                      setAmbientSpace('vinyl');
-                      setAmbientVolume(0.3);
-                      setBassBoostDb(2);
-                      applyEqPreset('Acoustic');
-                      toast.info('☕ Vinyl Study activated');
-                    }}
-                    className="rounded-lg bg-black/30 px-2.5 py-2 text-left transition active:scale-95"
-                  >
-                    ☕ Vinyl Study
-                    <div className="text-[10px] font-normal opacity-70">
-                      Vinyl Crackle + Cozy Acoustic
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => {
-                      haptic('light');
-                      resetDsp();
-                      toast.info('✨ Reset to Normal Studio sound');
-                    }}
-                    className="rounded-lg bg-black/30 px-2.5 py-2 text-left transition active:scale-95"
-                  >
-                    🎛 Normal Studio
-                    <div className="text-[10px] font-normal opacity-70">
-                      Clean flat playback
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* EQ Presets */}
-              <div className="flex flex-wrap gap-1.5">
-                {Object.keys(EQ_PRESETS).map((presetName) => (
-                  <button
-                    key={presetName}
-                    className="rounded-full border border-white/20 bg-black/25 px-3 py-1 text-xs font-bold"
-                    onClick={() => applyEqPreset(presetName)}
-                  >
-                    {presetName}
-                  </button>
-                ))}
-              </div>
-
-              {/* 5-Band Multi-Band Equalizer */}
-              <div className="rounded-xl bg-black/25 p-3">
-                <div className="mb-2 text-xs font-bold">
-                  5-Band Equalizer (-12 dB to +12 dB)
-                </div>
-                <div className="space-y-2">
-                  {EQ_LABELS.map((label, idx) => (
-                    <div key={label} className="flex items-center gap-2 text-xs">
-                      <span className="w-12 font-mono">{label}</span>
-                      <input
-                        type="range"
-                        min={-12}
-                        max={12}
-                        step={1}
-                        value={eqBands[idx]}
-                        onChange={(e) =>
-                          setEqBand(idx, Number(e.target.value))
-                        }
-                        className="accent-primary flex-1"
-                      />
-                      <span className="w-10 text-right font-mono">
-                        {eqBands[idx] > 0 ? `+${eqBands[idx]}` : eqBands[idx]}{' '}
-                        dB
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Bass Boost & Loudness Enhancer */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="rounded-xl bg-black/25 p-3">
-                  <div className="mb-1 flex justify-between text-xs font-bold">
-                    <span>Bass Boost</span>
-                    <span>+{bassBoostDb} dB</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={12}
-                    step={1}
-                    value={bassBoostDb}
-                    onChange={(e) => setBassBoostDb(Number(e.target.value))}
-                    className="accent-primary w-full"
-                  />
-                </div>
-                <div className="rounded-xl bg-black/25 p-3">
-                  <div className="mb-1 flex justify-between text-xs font-bold">
-                    <span>Loudness</span>
-                    <span>+{loudnessBoostDb} dB</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={12}
-                    step={1}
-                    value={loudnessBoostDb}
-                    onChange={(e) => setLoudnessBoostDb(Number(e.target.value))}
-                    className="accent-primary w-full"
-                  />
-                </div>
-              </div>
-
-              {/* Speed & Pitch Control (Slowed+Reverb / Nightcore) */}
-              <div className="rounded-xl bg-black/25 p-3">
-                <div className="mb-2 flex items-center justify-between text-xs font-bold">
-                  <span className="flex items-center gap-1">
-                    <Gauge size={14} /> Speed & Pitch ({playbackSpeed}x)
-                  </span>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      checked={preservePitch}
-                      onChange={(e) => setPreservePitch(e.target.checked)}
-                    />
-                    <span>Preserve Pitch</span>
-                  </label>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    [0.75, '0.75x'],
-                    [0.85, '0.85x (Slowed)'],
-                    [1.0, '1.0x (Normal)'],
-                    [1.15, '1.15x (Nightcore)'],
-                    [1.25, '1.25x'],
-                    [1.5, '1.5x'],
-                  ].map(([spd, lbl]) => (
-                    <button
-                      key={String(spd)}
-                      onClick={() => setPlaybackSpeed(Number(spd))}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-bold ${
-                        playbackSpeed === spd
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-black/30 opacity-80'
-                      }`}
-                    >
-                      {lbl}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Sound Spaces (Ambient Mixer + 8D Spatial Pan) */}
-              <div className="space-y-2.5 rounded-xl bg-black/25 p-3">
-                <div className="flex items-center justify-between text-xs font-bold">
-                  <span>🌌 Sound Spaces & 8D Audio</span>
-                  <label className="flex items-center gap-1.5">
-                    <input
-                      type="checkbox"
-                      checked={spatial8dEnabled}
-                      onChange={(e) => {
-                        haptic('light');
-                        setSpatial8dEnabled(e.target.checked);
-                      }}
-                    />
-                    <span>🎧 8D Pan</span>
-                  </label>
-                </div>
-                <div className="grid grid-cols-4 gap-1.5 text-xs font-bold">
-                  {(
-                    [
-                      ['off', 'Off'],
-                      ['rain', '🌧 Rain'],
-                      ['vinyl', '💿 Vinyl'],
-                      ['fireplace', '🔥 Fire'],
-                    ] as Array<[AmbientSpace, string]>
-                  ).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      onClick={() => {
-                        haptic('light');
-                        setAmbientSpace(mode);
-                      }}
-                      className={`rounded-lg py-1.5 transition active:scale-95 ${
-                        ambientSpace === mode
-                          ? 'bg-primary text-primary-foreground shadow'
-                          : 'bg-black/30 opacity-80'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {ambientSpace !== 'off' && (
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="opacity-75">Ambience</span>
-                    <input
-                      type="range"
-                      min={0.05}
-                      max={1}
-                      step={0.05}
-                      value={ambientVolume}
-                      onChange={(e) => setAmbientVolume(Number(e.target.value))}
-                      className="accent-primary flex-1"
-                    />
-                    <span className="w-9 text-right font-mono">
-                      {Math.round(ambientVolume * 100)}%
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Reliability & Smart Engine Toggles */}
-              <div className="space-y-2.5 rounded-xl bg-black/25 p-3 text-xs font-semibold">
-                <div className="mb-1 flex items-center gap-1 font-bold">
-                  <Sparkles size={14} /> Smart Mobile Engine
-                </div>
-                <label className="flex items-center justify-between">
-                  <span>📊 Live Beat Visualizer in Now Playing</span>
-                  <input
-                    type="checkbox"
-                    checked={visualizerEnabled}
-                    onChange={(e) => {
-                      haptic('light');
-                      setVisualizerEnabled(e.target.checked);
-                    }}
-                  />
-                </label>
-                <label className="flex items-center justify-between">
-                  <span>🎤 Karaoke Mode (Live Vocal Remover)</span>
-                  <input
-                    type="checkbox"
-                    checked={karaokeEnabled}
-                    onChange={(e) => {
-                      haptic('light');
-                      setKaraokeEnabled(e.target.checked);
-                    }}
-                  />
-                </label>
-                <div className="flex items-center justify-between">
-                  <span>🎚 DJ Auto-Crossfade</span>
-                  <div className="flex gap-1 text-[11px]">
-                    {[0, 3, 5, 8].map((sec) => (
-                      <button
-                        key={sec}
-                        onClick={() => {
-                          haptic('light');
-                          setCrossfadeSeconds(sec);
-                        }}
-                        className={`rounded px-2 py-0.5 font-bold ${
-                          crossfadeSeconds === sec
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-black/30 opacity-75'
-                        }`}
-                      >
-                        {sec === 0 ? 'Off' : `${sec}s`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <label className="flex items-center justify-between">
-                  <span>✂️ Silence Trimmer (Skip Silent Intros/Outros)</span>
-                  <input
-                    type="checkbox"
-                    checked={silenceTrimEnabled}
-                    onChange={(e) => {
-                      haptic('light');
-                      setSilenceTrimEnabled(e.target.checked);
-                    }}
-                  />
-                </label>
-                <label className="flex items-center justify-between">
-                  <span>📻 Endless Vibe Radio (Auto-Queue Similar)</span>
-                  <input
-                    type="checkbox"
-                    checked={endlessRadioEnabled}
-                    onChange={(e) => {
-                      haptic('light');
-                      setEndlessRadioEnabled(e.target.checked);
-                    }}
-                  />
-                </label>
-                <label className="flex items-center justify-between">
-                  <span>📳 Shake Phone to Skip Track</span>
-                  <input
-                    type="checkbox"
-                    checked={shakeToSkipEnabled}
-                    onChange={(e) => {
-                      haptic('light');
-                      setShakeToSkipEnabled(e.target.checked);
-                    }}
-                  />
-                </label>
-                {shakeToSkipEnabled && (
-                  <div className="flex items-center justify-between pl-2 text-[11px]">
-                    <span className="opacity-75">Shake sensitivity:</span>
-                    <div className="flex gap-1">
-                      {(['low', 'medium', 'high'] as const).map((level) => (
-                        <button
-                          key={level}
-                          onClick={() => {
-                            haptic('light');
-                            setShakeSensitivity(level);
-                          }}
-                          className={`rounded px-2 py-0.5 font-bold capitalize ${
-                            shakeSensitivity === level
-                              ? 'bg-primary text-primary-foreground'
-                              : 'bg-black/30 opacity-75'
-                          }`}
-                        >
-                          {level}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <label className="flex items-center justify-between">
-                  <span>⚡ Pre-Resolve Next 2 Queue Tracks (Instant Skip)</span>
-                  <input
-                    type="checkbox"
-                    checked={preResolveEnabled}
-                    onChange={(e) => setPreResolveEnabled(e.target.checked)}
-                  />
-                </label>
-                <label className="flex items-center justify-between">
-                  <span>⏭ SponsorBlock Auto-Skip (Intros/Outros)</span>
-                  <input
-                    type="checkbox"
-                    checked={sponsorBlockEnabled}
-                    onChange={(e) => setSponsorBlockEnabled(e.target.checked)}
-                  />
-                </label>
-                <label className="flex items-center justify-between">
-                  <span>📥 Auto-download played songs (off by default)</span>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(autoDownloadPlayed)}
-                    onChange={(e) => {
-                      haptic('light');
-                      void setAutoDownloadPlayed(e.target.checked);
-                    }}
-                  />
-                </label>
-              </div>
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              <AudioDspPanel showMobileOnlyControls />
             </div>
           )}
 
@@ -2267,7 +1744,7 @@ export const MobileAndroidShell: FC = () => {
                   className="flex items-center gap-1 rounded-lg bg-black/25 px-2.5 py-1.5 text-xs font-bold active:scale-95"
                   onClick={() => {
                     haptic('light');
-                    shuffleQueue(false);
+                    shuffleRemainingQueue();
                   }}
                 >
                   <Shuffle size={13} /> Shuffle

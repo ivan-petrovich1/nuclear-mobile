@@ -1,10 +1,10 @@
 import type { AudioSource } from '@nuclearplayer/hifi';
-import type { QueueItem } from '@nuclearplayer/model';
+import type { QueueItem, Track } from '@nuclearplayer/model';
 
-import { useQueueStore } from '../../stores/queueStore';
-import { getSetting } from '../../stores/settingsStore';
+import { useQueueStore } from '../../stores/queue/queueStore';
 import { useSoundStore } from '../../stores/soundStore';
 import { eventBus } from '../eventBus';
+import { playbackSettings } from '../playbackSettings';
 
 export type StartTrackOptions = {
   autoPlay: boolean;
@@ -35,6 +35,13 @@ export class PlaybackManager {
 
     useSoundStore.getState().play();
     eventBus.emit('trackStarted', item.track);
+  };
+
+  playTracks = (tracks: Track[]): void => {
+    const { clearQueue, addToQueue } = useQueueStore.getState();
+    clearQueue();
+    addToQueue(tracks);
+    this.play();
   };
 
   pause = (): void => {
@@ -83,8 +90,7 @@ export class PlaybackManager {
 
     eventBus.emit('trackFinished', item.track);
 
-    const repeatMode = (getSetting('core.playback.repeat') as string) ?? 'off';
-    if (repeatMode === 'one') {
+    if (playbackSettings.repeatMode === 'one') {
       useSoundStore.getState().seekTo(0);
       eventBus.emit('trackStarted', item.track);
       return;

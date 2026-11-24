@@ -10,7 +10,7 @@ import type {
 
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { usePlaylistStore } from '../stores/playlistStore';
-import { useQueueStore } from '../stores/queueStore';
+import { useQueueStore } from '../stores/queue/queueStore';
 import { httpHost } from './httpHost';
 import { playbackManager } from './playback';
 import { commands } from './tauri/bindings';
@@ -321,8 +321,8 @@ export const collectSeedProfile = async (): Promise<SeedProfile> => {
         ),
       ]);
 
-      if (recentRes.status === 'ok') {
-        recentRes.data.items.forEach((entry, idx) => {
+      if (recentRes?.items) {
+        recentRes.items.forEach((entry, idx) => {
           const primaryArtist = entry.artists?.[0];
           bumpArtist(primaryArtist, idx < 10 ? 12 : 6);
           if (entry.title && primaryArtist) {
@@ -337,8 +337,8 @@ export const collectSeedProfile = async (): Promise<SeedProfile> => {
         });
       }
 
-      if (topArtistsRes.status === 'ok') {
-        for (const topArtist of topArtistsRes.data) {
+      if (Array.isArray(topArtistsRes)) {
+        for (const topArtist of topArtistsRes) {
           bumpArtist(
             topArtist.name,
             topArtist.plays * 3 + topArtist.msPlayed / 60000,
@@ -426,7 +426,9 @@ type SeedFetchBundle = {
   mixes: PersonalizedMixCard[];
 };
 
-const fetchSeedBundle = async (seedArtist: string): Promise<SeedFetchBundle> => {
+const fetchSeedBundle = async (
+  seedArtist: string,
+): Promise<SeedFetchBundle> => {
   const artistSearch = await fetchJson<{ data?: DeezerArtistSearchItem[] }>(
     `https://api.deezer.com/search/artist?q=${encodeURIComponent(seedArtist)}&limit=3`,
   );
@@ -780,20 +782,35 @@ export const playOrSaveRecommendedMix = async (
 export const playSimilarArtistMix = async (
   artist: PersonalizedArtistCard,
 ): Promise<boolean> => {
-  const data = await fetchJson<{ data?: DeezerTrackItem[] }>(
-    `https://api.deezer.com/artist/${encodeURIComponent(artist.id)}/top?limit=15`,
-  );
-  const tracks = (data?.data ?? [])
-    .map((item) => mapDeezerTrack(item, artist.imageUrl))
-    .filter((t): t is Track => t !== null);
+  let tracks: Track[] = [];
+
+  if (/^\d+$/.test(artist.id)) {
+    const data = await fetchJson<{ data?: DeezerTrackItem[] }>(
+      `https://api.deezer.com/artist/${encodeURIComponent(artist.id)}/top?limit=15`,
+    );
+    tracks = (data?.data ?? [])
+      .map((item) => mapDeezerTrack(item, artist.imageUrl))
+      .filter((t): t is Track => t !== null);
+  }
+
+  if (tracks.length === 0 && artist.name.trim()) {
+    const itunes = await fetchJson<{ results?: ItunesSearchResult[] }>(
+      `https://itunes.apple.com/search?term=${encodeURIComponent(artist.name)}&entity=song&limit=15`,
+    );
+    const targetName = artist.name.trim().toLowerCase();
+    const mapped = (itunes?.results ?? [])
+      .map((item) => mapItunesTrack(item))
+      .filter((t): t is Track => t !== null);
+    const artistMatched = mapped.filter((t) =>
+      t.artists.some((a) => a.name.trim().toLowerCase().includes(targetName)),
+    );
+    tracks = (artistMatched.length > 0 ? artistMatched : mapped).slice(0, 15);
+  }
 
   if (tracks.length === 0) {
     return false;
   }
-  const q = useQueueStore.getState();
-  q.clearQueue();
-  q.addToQueue(tracks);
-  playbackManager.play();
+  playbackManager.playTracks(tracks);
   toast.success(`Playing top tracks by ${artist.name}`);
   return true;
 };
