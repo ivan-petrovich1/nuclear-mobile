@@ -39,6 +39,7 @@ import { pickArtwork, type RepeatMode, type Track } from '@nuclearplayer/model';
 import { useCoreSetting } from '../hooks/useCoreSetting';
 import { useCurrentQueueItem } from '../hooks/useCurrentQueueItem';
 import { useQueue } from '../hooks/useQueue';
+import { useStreamVerification } from '../hooks/useStreamVerification';
 import { useTrackActions } from '../hooks/useTrackActions';
 import { haptic } from '../services/androidMediaBridge';
 import { spinForgottenGem } from '../services/endlessRadio';
@@ -66,6 +67,7 @@ import { useSoundStore } from '../stores/soundStore';
 import { useUpdaterStore } from '../stores/updaterStore';
 import { AudioDspPanel } from './AudioDspPanel';
 import { BeatVisualizer } from './BeatVisualizer';
+import { ConnectedStreamVerification } from './ConnectedStreamVerification';
 import { FakeBankModal } from './FakeBankModal';
 import { LiveLyricTicker } from './LiveLyricTicker';
 import { P2pSyncPanel } from './P2pSyncPanel';
@@ -102,6 +104,7 @@ export const MobileAndroidShell: FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentItem = useCurrentQueueItem();
+  const streamVerification = useStreamVerification();
   const { items: queueItems, currentIndex } = useQueue();
   const goToNext = useQueueStore((s) => s.goToNext);
   const goToPrevious = useQueueStore((s) => s.goToPrevious);
@@ -1337,6 +1340,42 @@ export const MobileAndroidShell: FC = () => {
                       🔀 Switch Stream ({track.streamCandidates?.length ?? 0})
                     </button>
                   )}
+                  {streamVerification.isVisible && (
+                    <button
+                      type="button"
+                      disabled={
+                        streamVerification.isBusy ||
+                        streamVerification.isDisabled ||
+                        streamVerification.status === 'loading'
+                      }
+                      onClick={() => {
+                        haptic('medium');
+                        if (streamVerification.status === 'verifiedByUser') {
+                          void streamVerification.onUnverify();
+                        } else {
+                          void streamVerification.onVerify();
+                        }
+                      }}
+                      className={`rounded-full border px-2.5 py-0.5 transition active:scale-95 disabled:opacity-50 ${
+                        streamVerification.status === 'verifiedByUser' ||
+                        streamVerification.status === 'verified'
+                          ? 'border-emerald-400/40 bg-emerald-500/25 text-emerald-200'
+                          : streamVerification.status === 'weaklyVerified'
+                            ? 'border-amber-400/40 bg-amber-500/25 text-amber-200'
+                            : 'border-white/20 bg-black/35 text-white'
+                      }`}
+                    >
+                      {streamVerification.isBusy
+                        ? '⏳ Saving...'
+                        : streamVerification.status === 'verifiedByUser'
+                          ? '✓ Verified (Tap to Unverify)'
+                          : streamVerification.status === 'verified'
+                            ? '✓ Verified • Verify'
+                            : streamVerification.status === 'weaklyVerified'
+                              ? '◐ Weakly Verified • Verify'
+                              : '✓ Verify Track'}
+                    </button>
+                  )}
                   {isTrackDownloaded && (
                     <span className="rounded-full bg-emerald-500/25 px-2.5 py-0.5 text-emerald-300">
                       ✓ Offline Ready
@@ -1858,6 +1897,10 @@ export const MobileAndroidShell: FC = () => {
                   );
                 })}
               </div>
+
+              <div className="mt-1 shrink-0 rounded-xl bg-black/25">
+                <ConnectedStreamVerification />
+              </div>
             </div>
           )}
         </div>
@@ -1999,6 +2042,10 @@ export const MobileAndroidShell: FC = () => {
                   );
                 })
               )}
+            </div>
+
+            <div className="shrink-0">
+              <ConnectedStreamVerification />
             </div>
           </div>
         </div>

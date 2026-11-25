@@ -19,6 +19,7 @@ export const useAudioLoader = (
     }
 
     if (src.url !== prevUrl.current) {
+      audio.pause();
       if (src.mimeType) {
         audio.removeAttribute('src');
         audio.replaceChildren(createSourceElement(src.url, src.mimeType));

@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import type { Track } from '@nuclearplayer/model';
 
+import { httpHost } from '../services/httpHost';
 import { Logger } from '../services/logger';
 import { providersHost } from '../services/providersHost';
 import { getSetting, useSettingsStore } from '../stores/settingsStore';
@@ -115,13 +116,31 @@ class StreamVerificationApi {
     body: MappingRequest,
   ): Promise<Response> {
     const url = `${this.baseUrl}${path}`;
+    const payload = JSON.stringify(body);
     Logger.http.debug(`${method} ${url}`);
 
-    const response = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      });
+    } catch (fetchError) {
+      // Fallback to native Tauri/Android HTTP bridge when WebView blocks cross-origin fetch
+      try {
+        const nativeResp = await httpHost.fetch(url, {
+          method: method as 'GET' | 'POST' | 'PUT' | 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+        });
+        response = new Response(nativeResp.body ?? null, {
+          status: nativeResp.status,
+        });
+      } catch {
+        throw fetchError;
+      }
+    }
 
     if (response.ok || response.status === 404) {
       Logger.http.debug(`${method} ${url} -> ${response.status}`);

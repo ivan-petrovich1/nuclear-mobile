@@ -17,11 +17,20 @@ export const ConnectedStreamVerification: FC = () => {
   return (
     <StreamVerification
       {...verification}
-      onLearnMore={() =>
-        openUrl(
-          'https://docs.nuclearplayer.com/nuclear/core-concepts/stream-verification',
-        )
-      }
+      onLearnMore={() => {
+        const url =
+          'https://docs.nuclearplayer.com/nuclear/core-concepts/stream-verification';
+        const androidBridge = (
+          window as Window & {
+            NuclearAndroid?: { openExternalUrl?: (target: string) => void };
+          }
+        ).NuclearAndroid;
+        if (androidBridge?.openExternalUrl) {
+          androidBridge.openExternalUrl(url);
+        } else {
+          void openUrl(url);
+        }
+      }}
       labels={{
         unverified: t('streamVerification.unverified'),
         weaklyVerified: t('streamVerification.weaklyVerified'),

@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-11-25T10:05",
+    "description": "v1.0.8 — Fixed SponsorBlock toast spam (merged overlapping segments, per-track skip tracking & toast deduplication), added Track Stream Verification to Android APK (Now Playing quick pill, Queue footer & Stream Switcher + native HTTP fallback), and fixed brief 0.2s bleed of Track #0 / previous track at the start of every song.",
+    "type": "fix",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.8", "color": "purple" },
+      { "label": "All Ports", "color": "green" }
+    ]
+  },
+  {
     "date": "2026-11-25T08:05",
     "description": "v1.0.7 — Fixed Repeat One pausing at track end instead of looping automatically (WebKitGTK/GStreamer, MSE & Chromium WebView) and fixed Live Lyric Ticker stale-track race & duration matching.",
     "type": "fix",

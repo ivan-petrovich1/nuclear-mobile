@@ -41,9 +41,13 @@ export const ConnectedTrackTable: FC<ConnectedTrackTableProps> = (props) => {
         onPlayNow: (track: Track) => {
           const allTracks = restProps.tracks;
           const idx = Math.max(0, allTracks.indexOf(track));
+          const before = allTracks.slice(0, idx);
+          const fromClicked = allTracks.slice(idx);
           queueActions.clearQueue();
-          queueActions.addToQueue(allTracks);
-          useQueueStore.getState().goToIndex(idx);
+          queueActions.addToQueue(fromClicked);
+          if (before.length > 0) {
+            useQueueStore.getState().addAt(before, 0);
+          }
           if (idx > 0 && playbackSettings.shuffleEnabled) {
             useQueueStore.getState().shuffleQueue(false);
           }

@@ -587,7 +587,7 @@ const applyBestLyricsFromBatch = (
 
 const queryLrcLib = async (url: string): Promise<LrcLibResult[]> => {
   const resp = await httpHost.fetch(url, {
-    headers: { 'User-Agent': 'NuclearPlayer/1.0.7' },
+    headers: { 'User-Agent': 'NuclearPlayer/1.0.8' },
   });
   if (resp.status !== 200 || !resp.body) {
     return [];
@@ -669,7 +669,30 @@ const fetchLyricsForTrack = async (itemId: string, track: Track) => {
   });
 };
 
+let sponsorBlockRequestSeq = 0;
+
+const mergeSponsorSegments = (
+  segments: Array<[number, number]>,
+): Array<[number, number]> => {
+  if (segments.length <= 1) {
+    return segments;
+  }
+  const sorted = [...segments].sort((a, b) => a[0] - b[0]);
+  const merged: Array<[number, number]> = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = merged[merged.length - 1];
+    const [start, end] = sorted[i];
+    if (start <= prev[1] + 1) {
+      prev[1] = Math.max(prev[1], end);
+    } else {
+      merged.push([start, end]);
+    }
+  }
+  return merged;
+};
+
 const fetchSponsorBlockForVideo = async (videoId: string) => {
+  const reqSeq = ++sponsorBlockRequestSeq;
   useMobileEnhancementsStore.setState({ sponsorSegments: [] });
   if (!videoId || videoId.length !== 11) {
     return;
@@ -687,20 +710,27 @@ const fetchSponsorBlockForVideo = async (videoId: string) => {
     const resp = await httpHost.fetch(
       `https://sponsor.ajay.app/api/skipSegments?videoID=${encodeURIComponent(videoId)}&categories=${cats}`,
     );
+    if (reqSeq !== sponsorBlockRequestSeq) {
+      return;
+    }
     if (resp.status === 200 && resp.body) {
       const json = JSON.parse(resp.body) as Array<{
         segment?: [number, number];
       }>;
-      const segments = json
-        .map((entry) => entry.segment)
-        .filter(
-          (seg): seg is [number, number] =>
-            Array.isArray(seg) &&
-            seg.length === 2 &&
-            seg[1] > seg[0] &&
-            seg[1] - seg[0] >= 1.5,
-        );
-      useMobileEnhancementsStore.setState({ sponsorSegments: segments });
+      const segments = mergeSponsorSegments(
+        json
+          .map((entry) => entry.segment)
+          .filter(
+            (seg): seg is [number, number] =>
+              Array.isArray(seg) &&
+              seg.length === 2 &&
+              seg[1] > seg[0] &&
+              seg[1] - seg[0] >= 1.5,
+          ),
+      );
+      if (reqSeq === sponsorBlockRequestSeq) {
+        useMobileEnhancementsStore.setState({ sponsorSegments: segments });
+      }
     }
   } catch {
     // Ignore SponsorBlock 404 (no segments for this track)
@@ -1076,7 +1106,8 @@ export const initMobileEnhancements = () => {
 
   let lastTrackItemId: string | undefined;
   let lastVideoId: string | undefined;
-  let lastSkippedSegEnd = -1;
+  const skippedSponsorSegments = new Set<string>();
+  let lastSponsorSkipAt = 0;
   let lastStatsTickAt = Date.now();
   let trackEffectsTimer: number | null = null;
 
@@ -1088,8 +1119,13 @@ export const initMobileEnhancements = () => {
         trackEffectsTimer = null;
       }
       lyricsRequestSeq++;
+      sponsorBlockRequestSeq++;
       lastTrackItemId = undefined;
+      lastVideoId = undefined;
+      skippedSponsorSegments.clear();
+      lastSponsorSkipAt = 0;
       useMobileEnhancementsStore.setState({
+        sponsorSegments: [],
         lyricsTrackItemId: null,
         syncedLyrics: [],
         plainLyrics: null,
@@ -1101,18 +1137,18 @@ export const initMobileEnhancements = () => {
     const activeCand = currentItem.track.streamCandidates?.find(
       (c) => !c.failed && c.id,
     );
-    if (activeCand?.id && activeCand.id !== lastVideoId) {
-      lastVideoId = activeCand.id;
-      void fetchSponsorBlockForVideo(activeCand.id);
-    }
 
     if (currentItem.id !== lastTrackItemId) {
       lastTrackItemId = currentItem.id;
-      lastSkippedSegEnd = -1;
+      lastVideoId = undefined;
+      skippedSponsorSegments.clear();
+      lastSponsorSkipAt = 0;
+      sponsorBlockRequestSeq++;
       lyricsRequestSeq++;
       useMobileEnhancementsStore.getState().clearLoop();
-      // Immediately clear previous track's lyrics so stale lyrics never flash
+      // Immediately clear previous track's lyrics and SponsorBlock segments so stale data never carries over
       useMobileEnhancementsStore.setState({
+        sponsorSegments: [],
         lyricsTrackItemId: currentItem.id,
         syncedLyrics: [],
         plainLyrics: null,
@@ -1156,6 +1192,12 @@ export const initMobileEnhancements = () => {
       } else {
         runTrackEffects();
       }
+    }
+
+    if (activeCand?.id && activeCand.id !== lastVideoId) {
+      lastVideoId = activeCand.id;
+      skippedSponsorSegments.clear();
+      void fetchSponsorBlockForVideo(activeCand.id);
     }
 
     void preResolveUpcomingTracks();
@@ -1328,19 +1370,27 @@ export const initMobileEnhancements = () => {
     if (
       sponsorBlockEnabled &&
       soundState.status === 'playing' &&
-      sponsorSegments.length > 0
+      sponsorSegments.length > 0 &&
+      now - lastSponsorSkipAt >= 1500
     ) {
       const pos = soundState.seek;
       for (const [start, end] of sponsorSegments) {
+        const segKey = `${Math.round(start * 10)}-${Math.round(end * 10)}`;
         if (
+          !skippedSponsorSegments.has(segKey) &&
           pos >= start &&
-          pos < end - 0.5 &&
-          Math.abs(end - lastSkippedSegEnd) > 1
+          pos < end - 0.5
         ) {
-          lastSkippedSegEnd = end;
-          useSoundStore.getState().seekTo(end);
+          skippedSponsorSegments.add(segKey);
+          lastSponsorSkipAt = now;
+          const targetSeek =
+            soundState.duration > 0
+              ? Math.min(end, Math.max(0, soundState.duration - 0.25))
+              : end;
+          useSoundStore.getState().seekTo(targetSeek);
           toast.info(
             `⚡ SponsorBlock: Skipped non-music segment (${Math.round(end - start)}s)`,
+            { id: 'sponsorblock-skip', duration: 2200 },
           );
           break;
         }

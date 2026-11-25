@@ -29,6 +29,7 @@ export class StreamResolution {
 
     if (options.autoPlay) {
       useSoundStore.getState().stop();
+      useSoundStore.getState().setSrc(null);
     }
     updateItemState(item.id, { status: 'loading', error: undefined });
 
