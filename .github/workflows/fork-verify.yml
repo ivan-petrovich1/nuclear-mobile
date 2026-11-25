@@ -21,19 +21,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v6
+
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "24"
+          cache: "pnpm"
 
       - name: Run fast fork integrity guard
         run: node scripts/verify-fork-integrity.mjs
 
-      - name: Setup PNPM
-        uses: pnpm/action-setup@v6
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Cache Turborepo build outputs
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-verify-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            turbo-verify-
 
       - name: Build workspace packages and frontend
         run: |
@@ -43,15 +52,11 @@ jobs:
       - name: Run fork safeguards and full player test suite
         run: pnpm --filter @nuclearplayer/player test
 
-      - name: Install Linux Rust build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            libdbus-1-dev \
-            libssl-dev
+      - name: Install & cache Linux Rust build dependencies
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev libssl-dev clang lld
+          version: 2.0
 
       - name: Setup Rust (Desktop + Android target)
         uses: dtolnay/rust-toolchain@stable
@@ -62,8 +67,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/player/src-tauri -> target
+          shared-key: "verify-v2-linux-android"
 
       - name: Check Linux Rust binary & run Rust unit tests
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
         run: |
           cargo check --manifest-path packages/player/src-tauri/Cargo.toml --bins
           cargo test --manifest-path packages/player/src-tauri/Cargo.toml --lib

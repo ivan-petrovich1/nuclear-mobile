@@ -14,6 +14,7 @@ keep-ours packages/player/src/stores/updaterStore.ts
 keep-ours packages/player/fork-changelog.json
 keep-ours README.md
 keep-ours scripts/verify-fork-integrity.mjs
+keep-ours scripts/build-local-appimage.sh
 keep-ours .husky/pre-commit
 keep-ours .gitattributes
 keep-ours .github/fork-protected-files.txt

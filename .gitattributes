@@ -14,6 +14,7 @@ packages/player/src-tauri/src/ytdlp.rs merge=ours
 packages/player/fork-changelog.json merge=ours
 README.md merge=ours
 scripts/verify-fork-integrity.mjs merge=ours
+scripts/build-local-appimage.sh merge=ours
 .github/fork-protected-files.txt merge=ours
 .github/workflows/multiplatform-release.yml merge=ours
 .github/workflows/upstream-sync.yml merge=ours

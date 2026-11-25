@@ -251,16 +251,12 @@ jobs:
         shell: bash
         run: pnpm --filter @nuclearplayer/player test
 
-      - name: Install Linux Rust build dependencies
+      - name: Install & cache Linux Rust build dependencies
         if: steps.merge.outputs.status == 'clean' && steps.tests.outcome == 'success'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            libdbus-1-dev \
-            libssl-dev
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev libdbus-1-dev libssl-dev clang lld
+          version: 2.0
 
       - name: Setup Rust (Desktop + Android target)
         if: steps.merge.outputs.status == 'clean' && steps.tests.outcome == 'success'
@@ -273,11 +269,15 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: packages/player/src-tauri -> target
+          shared-key: "verify-v2-linux-android"
 
       - name: Verify Linux Rust binary, Rust unit tests, and Android Rust cross-compile
         id: rust
         if: steps.merge.outputs.status == 'clean' && steps.tests.outcome == 'success'
         continue-on-error: true
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
         shell: bash
         run: |
           set -euo pipefail
