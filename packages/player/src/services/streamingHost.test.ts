@@ -38,6 +38,38 @@ describe('streamingHost', () => {
       }
     });
 
+    it('falls back to built-in youtube when active streaming provider is not yet loaded', async () => {
+      const searchForTrack = vi.fn().mockResolvedValue([
+        {
+          id: 'yt-1',
+          title: 'Fallback Candidate',
+          source: { provider: 'youtube', id: 'yt-1' },
+          failed: false,
+        },
+      ]);
+
+      providersHost.register({
+        id: 'youtube',
+        kind: 'streaming',
+        name: 'YouTube',
+        searchForTrack,
+        getStreamUrl: vi.fn(),
+      });
+      // Active selection points to an external plugin still hydrating at startup
+      providersHost.setActive('streaming', 'nucleartube');
+
+      const track: Track = {
+        title: 'Test Track',
+        artists: [{ name: 'Test Artist', roles: [] }],
+        source: { provider: 'test', id: 'track-1' },
+      };
+
+      const result = await streamingHost.resolveCandidatesForTrack(track);
+
+      expect(result.success).toBe(true);
+      expect(searchForTrack).toHaveBeenCalledTimes(1);
+    });
+
     it('searches for track and returns candidates', async () => {
       const mockCandidates = [
         {

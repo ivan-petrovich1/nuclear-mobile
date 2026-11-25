@@ -840,6 +840,7 @@ export const initP2pSync = () => {
   let pollTimer: number | null = null;
   let pollInFlight = false;
   let consecutivePollFailures = 0;
+  let lastFailedPollAt = 0;
 
   const schedulePoll = (delayMs: number) => {
     if (pollTimer !== null) {
@@ -870,9 +871,11 @@ export const initP2pSync = () => {
       const remote = await p2p.pollRemoteState();
       if (remote) {
         consecutivePollFailures = 0;
+        lastFailedPollAt = 0;
         nextDelay = 2500;
       } else {
         consecutivePollFailures += 1;
+        lastFailedPollAt = Date.now();
         nextDelay = Math.min(
           60_000,
           2500 * 2 ** Math.min(consecutivePollFailures, 5),
@@ -898,6 +901,7 @@ export const initP2pSync = () => {
       prevEnabled = s.enabled;
       prevPeerAddress = s.peerAddress;
       consecutivePollFailures = 0;
+      lastFailedPollAt = 0;
       if (pollTimer !== null) {
         window.clearTimeout(pollTimer);
         pollTimer = null;
@@ -924,6 +928,12 @@ export const initP2pSync = () => {
     if (now - lastAutoPullAt < 12000) {
       return;
     }
+    if (
+      pollInFlight ||
+      (consecutivePollFailures > 0 && now - lastFailedPollAt < 30_000)
+    ) {
+      return;
+    }
     const p2p = useP2pSyncStore.getState();
     if (!p2p.enabled || !p2p.seamlessHandoff || !p2p.peerAddress.trim()) {
       return;
@@ -937,20 +947,26 @@ export const initP2pSync = () => {
       await p2p.pullHandoffFromPeer(false);
     }
   };
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
+  const onFocusOrVisible = () => {
+    if (
+      consecutivePollFailures === 0 ||
+      Date.now() - lastFailedPollAt >= 30_000
+    ) {
       consecutivePollFailures = 0;
       schedulePoll(250);
       void trySeamlessAutoPull();
+    }
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      onFocusOrVisible();
     } else if (pollTimer !== null) {
       window.clearTimeout(pollTimer);
       pollTimer = null;
     }
   });
   window.addEventListener('focus', () => {
-    consecutivePollFailures = 0;
-    schedulePoll(250);
-    void trySeamlessAutoPull();
+    onFocusOrVisible();
   });
 
   // Keep cached snapshot fresh when playlists or favorites change, and track deleted playlist IDs

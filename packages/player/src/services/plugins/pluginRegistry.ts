@@ -17,6 +17,7 @@ export type PluginRegistryEntry = {
   enabled: boolean;
   installedAt: string;
   lastUpdatedAt: string;
+  lastUpdatedSha256?: string;
   warnings?: string[];
 };
 
@@ -81,6 +82,23 @@ export const setRegistryEntryWarnings = async (
   const next: PluginRegistryEntry = {
     ...current,
     warnings: warnings.length ? warnings : undefined,
+  };
+  await store.set(keyFor(id), next);
+  await store.save();
+};
+
+export const setRegistryEntryLastUpdatedSha256 = async (
+  id: string,
+  sha256: string,
+): Promise<void> => {
+  const current = await getRegistryEntry(id);
+  if (!current) {
+    return;
+  }
+  const next: PluginRegistryEntry = {
+    ...current,
+    lastUpdatedSha256: sha256,
+    lastUpdatedAt: new Date().toISOString(),
   };
   await store.set(keyFor(id), next);
   await store.save();

@@ -6,7 +6,10 @@ import { getSetting } from '../../stores/settingsStore';
 import { errorMessage } from '../../utils/errorMessage';
 import { Logger } from '../logger';
 import { downloadAndExtractPlugin } from './pluginDownloader';
-import { listRegistryEntries } from './pluginRegistry';
+import {
+  listRegistryEntries,
+  setRegistryEntryLastUpdatedSha256,
+} from './pluginRegistry';
 
 export const checkAndUpdatePlugins = async (): Promise<void> => {
   const autoUpdate = getSetting('core.plugins.autoUpdate');
@@ -45,6 +48,10 @@ export const checkAndUpdatePlugins = async (): Promise<void> => {
       continue;
     }
 
+    if (entry.lastUpdatedSha256 && entry.lastUpdatedSha256 === remote.sha256) {
+      continue;
+    }
+
     try {
       Logger.plugins.info(
         `Updating plugin ${entry.id} from version ${entry.version} to ${remote.version}...`,
@@ -65,6 +72,7 @@ export const checkAndUpdatePlugins = async (): Promise<void> => {
       if (wasEnabled) {
         await usePluginStore.getState().enablePlugin(entry.id);
       }
+      await setRegistryEntryLastUpdatedSha256(entry.id, remote.sha256);
       Logger.plugins.info(
         `Successfully updated plugin ${entry.id} to version ${remote.version}`,
       );

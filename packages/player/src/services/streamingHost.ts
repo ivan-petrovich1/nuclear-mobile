@@ -13,7 +13,9 @@ const getActiveStreamingProvider = (): StreamingProvider | undefined =>
   providersHost.get<StreamingProvider>(
     providersHost.getActive('streaming'),
     'streaming',
-  );
+  ) ??
+  providersHost.get<StreamingProvider>('youtube', 'streaming') ??
+  (providersHost.list('streaming')[0] as StreamingProvider | undefined);
 
 export const hasActiveStreamingProvider = (): boolean =>
   Boolean(getActiveStreamingProvider());

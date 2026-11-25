@@ -330,4 +330,46 @@ describe('checkAndUpdatePlugins', () => {
     ).toBe('2.0.0');
     expect(logWarn).not.toHaveBeenCalled();
   });
+
+  it('does not re-download when a remote package keeps an older internal manifest version with the same sha256', async () => {
+    useSettingsStore.getState().setValue('core.plugins.autoUpdate', true);
+    await seedPlugin({ id: 'mismatch-plugin', version: '1.0.0' });
+
+    FetchMock.get('plugin-registry', {
+      version: 1,
+      plugins: [
+        new MarketplacePluginBuilder()
+          .withId('mismatch-plugin')
+          .withVersion('1.0.1')
+          .withDownloadUrl('https://example.com/mismatch-plugin.zip')
+          .build(),
+      ],
+    });
+
+    // Downloaded zip still reports 1.0.0 in its internal manifest.json
+    createPluginFolder(`${DOWNLOAD_BASE}/mismatch-plugin`, {
+      id: 'mismatch-plugin',
+      version: '1.0.0',
+    });
+
+    let downloadCalls = 0;
+    mockIPC((cmd) => {
+      if (cmd === 'download_file') {
+        downloadCalls += 1;
+        return;
+      }
+      if (cmd === 'copy_dir_recursive') {
+        return true;
+      }
+      if (cmd === 'sha256_file') {
+        return REGISTRY_SHA256;
+      }
+    });
+
+    await checkAndUpdatePlugins();
+    expect(downloadCalls).toBe(1);
+
+    await checkAndUpdatePlugins();
+    expect(downloadCalls).toBe(1);
+  });
 });
