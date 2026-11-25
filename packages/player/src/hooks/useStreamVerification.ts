@@ -25,7 +25,14 @@ export const useStreamVerification = () => {
 
   useEffect(() => {
     setIsLoading(true);
-    if (!currentItem || !hasCandidates || !isEnabled) {
+    if (!currentItem || !isEnabled) {
+      return;
+    }
+    if (!hasCandidates) {
+      if (currentItem.status === 'success') {
+        setVerifiedStream(undefined);
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -40,7 +47,14 @@ export const useStreamVerification = () => {
     return () => {
       isCurrent = false;
     };
-  }, [currentItem?.id, hasCandidates, isEnabled, isServiceEnabled]);
+  }, [
+    currentItem?.id,
+    currentItem?.status,
+    headCandidate?.id,
+    hasCandidates,
+    isEnabled,
+    isServiceEnabled,
+  ]);
 
   const getStatus = (): StreamVerificationStatus => {
     if (isLoading) {

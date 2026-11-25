@@ -11,6 +11,7 @@ import { playbackManager } from '../playback';
 import { hasActiveStreamingProvider, streamingHost } from '../streamingHost';
 import { AudioSourceFactory } from './audioSource';
 import { candidatesForTrack } from './candidateSource';
+import { isOfflineBypassed } from './offlineBypass';
 
 export type ResolveOptions = {
   autoPlay: boolean;
@@ -26,6 +27,7 @@ export class StreamResolution {
   async resolve(item: QueueItem, options: ResolveOptions): Promise<void> {
     const signal = this.supersedeActiveResolution(item.id);
     const { updateItemState } = useQueueStore.getState();
+    playbackManager.beginTrackLoad();
 
     if (options.autoPlay) {
       useSoundStore.getState().stop();
@@ -34,18 +36,63 @@ export class StreamResolution {
     updateItemState(item.id, { status: 'loading', error: undefined });
 
     // Check if track is downloaded locally for instant offline playback
-    const downloaded = useDownloadStore
-      .getState()
-      .getDownloadedInfo(item.track);
+    const downloaded = !isOfflineBypassed(item.id)
+      ? useDownloadStore.getState().getDownloadedInfo(item.track)
+      : undefined;
     if (downloaded) {
       try {
         const port = await invoke<number>('stream_server_port');
         if (!signal.aborted) {
           const localUrl = `http://127.0.0.1:${port}/local/${encodeURIComponent(downloaded.fileName)}`;
-          updateItemState(item.id, { status: 'success' });
+          const localBaseStream = {
+            url: localUrl,
+            protocol: 'http' as const,
+            durationMs: downloaded.durationMs,
+            container: downloaded.container,
+            codec: downloaded.codec,
+          };
+          let nextTrack = item.track;
+          if (
+            item.track.streamCandidates &&
+            item.track.streamCandidates.length > 0
+          ) {
+            const [head, ...rest] = item.track.streamCandidates;
+            nextTrack = {
+              ...item.track,
+              streamCandidates: [
+                head.stream
+                  ? head
+                  : {
+                      ...head,
+                      failed: false,
+                      stream: { ...localBaseStream, source: head.source },
+                    },
+                ...rest,
+              ],
+            };
+          } else if (downloaded.streamId) {
+            const candidateSource = {
+              provider: downloaded.provider || 'youtube',
+              id: downloaded.streamId,
+            };
+            nextTrack = {
+              ...item.track,
+              streamCandidates: [
+                {
+                  id: downloaded.streamId,
+                  title: downloaded.candidateTitle || item.track.title,
+                  durationMs: downloaded.durationMs,
+                  failed: false,
+                  source: candidateSource,
+                  stream: { ...localBaseStream, source: candidateSource },
+                },
+              ],
+            };
+          }
+          updateItemState(item.id, { status: 'success', track: nextTrack });
           this.activeItemId = null;
           playbackManager.startTrack(
-            item,
+            { ...item, track: nextTrack },
             {
               url: localUrl,
               protocol: 'http',

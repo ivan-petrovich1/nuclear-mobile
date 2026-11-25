@@ -14,6 +14,8 @@ export const usePlaybackStatus = (
   onError?: (error: Error) => void,
 ) => {
   const activeSrcRef = useRef(srcUrl);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -21,22 +23,37 @@ export const usePlaybackStatus = (
       return;
     }
 
+    let cancelled = false;
     const srcChanged = srcUrl !== activeSrcRef.current;
 
     const tryPlay = () => {
-      if (!isReadyToPlay(audio)) {
+      if (cancelled || !isReadyToPlay(audio)) {
         return;
       }
       if (!audio.paused && !audio.ended) {
         return;
       }
       activeSrcRef.current = srcUrl;
-      audio.play().then(undefined, (err: DOMException) => {
-        if (err.name === 'AbortError' || err.name === 'NotSupportedError') {
-          return;
-        }
-        onError?.(err);
-      });
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise.then(
+          () => {
+            if (cancelled) {
+              audio.pause();
+            }
+          },
+          (err: DOMException) => {
+            if (
+              cancelled ||
+              err.name === 'AbortError' ||
+              err.name === 'NotSupportedError'
+            ) {
+              return;
+            }
+            onErrorRef.current?.(err);
+          },
+        );
+      }
     };
 
     switch (status) {
@@ -49,6 +66,7 @@ export const usePlaybackStatus = (
         audio.addEventListener('loadeddata', onCanPlay);
         audio.addEventListener('seeked', onCanPlay);
         return () => {
+          cancelled = true;
           audio.removeEventListener('canplay', onCanPlay);
           audio.removeEventListener('loadeddata', onCanPlay);
           audio.removeEventListener('seeked', onCanPlay);
@@ -56,13 +74,17 @@ export const usePlaybackStatus = (
       }
       case 'paused': {
         audio.pause();
-        return;
+        return () => {
+          cancelled = true;
+        };
       }
       case 'stopped': {
         audio.pause();
         audio.currentTime = 0;
-        return;
+        return () => {
+          cancelled = true;
+        };
       }
     }
-  }, [status, srcUrl, audioRef, onError]);
+  }, [status, srcUrl, audioRef]);
 };

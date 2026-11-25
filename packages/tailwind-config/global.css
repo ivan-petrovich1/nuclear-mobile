@@ -123,6 +123,47 @@
     --input: #0a0a0d;
   }
 
+  html[data-custom-wallpaper='true'] body,
+  html[data-custom-wallpaper='true'][data-oled='true'] body {
+    background-color: transparent !important;
+    background-image: none !important;
+  }
+
+  html[data-custom-wallpaper='true'] [data-testid='wallpaper-layer'] {
+    filter: blur(var(--custom-wallpaper-blur, 2px));
+    transform: scale(1.04);
+  }
+
+  html[data-custom-wallpaper='true'] [data-testid='wallpaper-layer']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, var(--custom-wallpaper-dim, 0.45));
+  }
+
+  html[data-custom-wallpaper='true'] .surface-muted,
+  html[data-custom-wallpaper='true'] .surface-background,
+  html[data-custom-wallpaper='true'] .surface-sidebar-left,
+  html[data-custom-wallpaper='true'] .surface-sidebar-right,
+  html[data-custom-wallpaper='true'] .surface-topbar,
+  html[data-custom-wallpaper='true'] .surface-bottombar {
+    background-color: color-mix(
+      in srgb,
+      var(--background) var(--custom-wallpaper-surface-alpha, 62%),
+      transparent
+    );
+    background-image: none;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  html[data-custom-wallpaper='true'] [role='dialog'] .surface-background,
+  html[data-custom-wallpaper='true'] .surface-popover {
+    background-color: color-mix(in srgb, var(--background) 88%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
   html {
     font-size: var(--font-size-base);
   }

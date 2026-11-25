@@ -26,6 +26,8 @@ pub fn log_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             log::LevelFilter::Info
         })
         .level_for("discord_rich_presence", log::LevelFilter::Error)
+        .level_for("zbus", log::LevelFilter::Warn)
+        .level_for("tracing", log::LevelFilter::Warn)
         .format(|callback, message, record| {
             logging::capture_startup_log(record.level(), &message.to_string());
             callback.finish(format_args!(

@@ -13,8 +13,18 @@ export type StartTrackOptions = {
 export class PlaybackManager {
   private mountedItemId: string | null = null;
   private playRequested = false;
+  private pauseRequested = false;
+  private pendingAdvance = false;
+  private lastFinishedItemId: string | null = null;
+  private lastFinishedAt = 0;
+
+  beginTrackLoad = (): void => {
+    this.pauseRequested = false;
+  };
 
   play = (): void => {
+    this.pendingAdvance = false;
+    this.pauseRequested = false;
     const { status } = useSoundStore.getState();
     if (status === 'playing') {
       return;
@@ -49,7 +59,11 @@ export class PlaybackManager {
 
   pause = (): void => {
     this.playRequested = false;
+    this.pauseRequested = true;
     useSoundStore.getState().pause();
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('audio').forEach((el) => el.pause());
+    }
   };
 
   toggle = (): void => {
@@ -67,9 +81,14 @@ export class PlaybackManager {
   ): void => {
     useSoundStore.getState().setSrc(source);
     this.mountedItemId = item.id;
+    this.pendingAdvance = false;
+    this.lastFinishedItemId = null;
+    this.lastFinishedAt = 0;
 
-    const shouldPlay = options.autoPlay || this.playRequested;
+    const shouldPlay =
+      !this.pauseRequested && (options.autoPlay || this.playRequested);
     this.playRequested = false;
+    this.pauseRequested = false;
 
     if (!shouldPlay) {
       return;
@@ -90,6 +109,21 @@ export class PlaybackManager {
     if (!item) {
       return;
     }
+    if (this.pendingAdvance) {
+      return;
+    }
+    if (this.mountedItemId !== null && this.mountedItemId !== item.id) {
+      return;
+    }
+    const now = Date.now();
+    if (
+      this.lastFinishedItemId === item.id &&
+      now - this.lastFinishedAt < 1000
+    ) {
+      return;
+    }
+    this.lastFinishedItemId = item.id;
+    this.lastFinishedAt = now;
 
     eventBus.emit('trackFinished', item.track);
 
@@ -115,7 +149,12 @@ export class PlaybackManager {
       return;
     }
 
+    this.mountedItemId = null;
     useQueueStore.getState().goToNext();
+    const nextItem = useQueueStore.getState().getCurrentItem();
+    if (nextItem && nextItem.id !== item.id) {
+      this.pendingAdvance = true;
+    }
   };
 
   sourceReady = (): void => {

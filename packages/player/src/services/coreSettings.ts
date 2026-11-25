@@ -222,7 +222,8 @@ export const CORE_SETTINGS: SettingDefinition[] = [
   {
     id: 'playback.exportDownloadsToPublicFolder',
     title: 'preferences.playback.exportDownloadsToPublicFolder.title',
-    description: 'preferences.playback.exportDownloadsToPublicFolder.description',
+    description:
+      'preferences.playback.exportDownloadsToPublicFolder.description',
     category: 'playback',
     kind: 'boolean',
     default: false,
@@ -293,6 +294,15 @@ export const CORE_SETTINGS: SettingDefinition[] = [
     category: 'updates',
     kind: 'boolean',
     default: false,
+    widget: { type: 'toggle' },
+  },
+  {
+    id: 'updates.anonymousStats',
+    title: 'preferences.updates.anonymousStats.title',
+    description: 'preferences.updates.anonymousStats.description',
+    category: 'updates',
+    kind: 'boolean',
+    default: true,
     widget: { type: 'toggle' },
   },
   {

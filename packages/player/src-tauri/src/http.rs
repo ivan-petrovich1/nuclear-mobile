@@ -4,6 +4,8 @@ use reqwest::{header::HeaderMap, header::HeaderName, header::HeaderValue, Client
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::OnceLock;
+use std::time::Duration;
 use tauri::command;
 
 const REDACTED_HEADERS: &[&str] = &[
@@ -106,12 +108,26 @@ pub struct HttpResponse {
     body: String,
 }
 
+static SHARED_HTTP_CLIENT: OnceLock<Result<Client, String>> = OnceLock::new();
+
+fn shared_http_client() -> Result<&'static Client, String> {
+    SHARED_HTTP_CLIENT
+        .get_or_init(|| {
+            crate::net::http_client_builder()
+                .connect_timeout(Duration::from_secs(15))
+                .timeout(Duration::from_secs(45))
+                .pool_idle_timeout(Duration::from_secs(30))
+                .build()
+                .map_err(|e| format!("Failed to create HTTP client: {}", e))
+        })
+        .as_ref()
+        .map_err(|e| e.clone())
+}
+
 #[command]
 #[specta::specta]
 pub async fn http_fetch(request: HttpRequest) -> Result<HttpResponse, String> {
-    let client = crate::net::http_client_builder()
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let client = shared_http_client()?;
 
     let method = request
         .method

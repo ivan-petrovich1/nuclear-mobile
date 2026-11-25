@@ -194,4 +194,64 @@ describe('Sound', () => {
 
     restore();
   });
+
+  it('pauses, tears down media source, and ignores late ended events when unmounted', () => {
+    const { restore } = setupAudioContextMock();
+    const onEnd = vi.fn();
+    const { unmount } = render(
+      <Sound src={httpSource} status="playing" onEnd={onEnd} />,
+    );
+
+    const audio = document.querySelector('audio') as HTMLAudioElement;
+    const loadSpy = vi.spyOn(audio, 'load');
+    const { pauseMock } = resetMediaSpies();
+
+    unmount();
+
+    expect(pauseMock).toHaveBeenCalled();
+    expect(audio.muted).toBe(true);
+    expect(audio.getAttribute('src')).toBeNull();
+    expect(audio.innerHTML).toBe('');
+    expect(loadSpy).toHaveBeenCalled();
+
+    act(() => {
+      audio.dispatchEvent(new Event('ended'));
+    });
+    expect(onEnd).not.toHaveBeenCalled();
+
+    restore();
+  });
+
+  it('immediately pauses if pending audio.play() resolves after status becomes paused', async () => {
+    const { restore } = setupAudioContextMock();
+    let resolvePlay!: () => void;
+    const playSpy = vi
+      .spyOn(window.HTMLMediaElement.prototype, 'play')
+      .mockImplementation(
+        () =>
+          new Promise<void>((resolve) => {
+            resolvePlay = resolve;
+          }),
+      );
+
+    const { rerender } = render(<Sound src={httpSource} status="playing" />);
+    const audio = document.querySelector('audio') as HTMLAudioElement;
+    act(() => {
+      fireMediaCanPlay(audio);
+    });
+    expect(playSpy).toHaveBeenCalledTimes(1);
+
+    const { pauseMock } = resetMediaSpies();
+    rerender(<Sound src={httpSource} status="paused" />);
+    pauseMock.mockClear();
+
+    await act(async () => {
+      resolvePlay();
+      await Promise.resolve();
+    });
+
+    expect(pauseMock).toHaveBeenCalledTimes(1);
+    playSpy.mockRestore();
+    restore();
+  });
 });

@@ -3,6 +3,8 @@ import { waitFor } from '@testing-library/react';
 import type { QueueItem, StreamCandidate } from '@nuclearplayer/model';
 
 import { providersHost } from '../services/providersHost';
+import { clearAllOfflineBypass } from '../services/streamResolution/offlineBypass';
+import { useDownloadStore } from '../stores/downloadStore';
 import { useQueueStore } from '../stores/queue/queueStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSoundStore } from '../stores/soundStore';
@@ -41,6 +43,8 @@ const registerStreamingProvider = () => {
 
 describe('Queue candidate selection', () => {
   beforeEach(() => {
+    clearAllOfflineBypass();
+    useDownloadStore.setState({ items: {} });
     useQueueStore.setState({
       items: [],
       currentIndex: 0,
@@ -217,6 +221,49 @@ describe('Queue candidate selection', () => {
       expect(QueueWrapper.candidatePopover.selectedCandidate).toBe(
         'Broken Version',
       );
+    });
+
+    it('bypasses offline cache and switches to the selected online candidate', async () => {
+      const item = itemWithCandidates('Karma Police', [
+        createMockCandidate('yt-a', 'Version A'),
+        createMockCandidate('yt-b', 'Version B'),
+      ]);
+      const { getTrackDownloadKey } = await import('../stores/downloadStore');
+      const dlKey = getTrackDownloadKey(item.track);
+      useDownloadStore.setState({
+        items: {
+          [dlKey]: {
+            key: dlKey,
+            fileName: `${dlKey}.m4a`,
+            title: item.track.title,
+            artist: 'Test Artist',
+            streamId: 'yt-a',
+            downloadedAtIso: '2026-11-25T10:00:00.000Z',
+          },
+        },
+      });
+
+      QueueWrapper.initQueue([item]);
+      await QueueWrapper.mount();
+
+      await waitFor(() => {
+        expect(StreamResolutionWrapper.getSoundState().src).toEqual({
+          url: `http://127.0.0.1:9100/local/${dlKey}.m4a`,
+          protocol: 'http',
+          startPositionSeconds: undefined,
+        });
+      });
+
+      await QueueWrapper.candidatePopover.openFor('Karma Police');
+      await QueueWrapper.candidatePopover.select('Version B');
+
+      await waitFor(() => {
+        expect(StreamResolutionWrapper.getSoundState().src).toEqual({
+          url: 'http://127.0.0.1:9100/stream/aHR0cHM6Ly9leGFtcGxlLmNvbS95dC1iLm1wMw',
+          protocol: 'https',
+        });
+      });
+      useDownloadStore.setState({ items: {} });
     });
   });
 });

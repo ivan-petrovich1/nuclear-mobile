@@ -25,8 +25,17 @@ export const checkAndUpdatePlugins = async (): Promise<void> => {
   );
 
   const marketplacePlugins = await pluginMarketplaceApi.getPlugins();
+  const isMobile =
+    typeof window !== 'undefined' &&
+    (window.innerWidth < 768 ||
+      (typeof navigator !== 'undefined' &&
+        /Android/i.test(navigator.userAgent)));
 
   for (const entry of storeEntries) {
+    if (isMobile && entry.id === 'nuclear-mini-player') {
+      continue;
+    }
+
     const remote = marketplacePlugins.find((plugin) => plugin.id === entry.id);
     if (!remote?.version || !remote?.downloadUrl || !remote?.sha256) {
       continue;
@@ -48,7 +57,9 @@ export const checkAndUpdatePlugins = async (): Promise<void> => {
         sha256: remote.sha256,
       });
 
-      await usePluginStore.getState().unloadPlugin(entry.id);
+      if (usePluginStore.getState().plugins[entry.id]) {
+        await usePluginStore.getState().unloadPlugin(entry.id);
+      }
       await usePluginStore.getState().loadPluginFromPath(extractedPath);
 
       if (wasEnabled) {

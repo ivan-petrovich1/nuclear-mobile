@@ -1,3 +1,7 @@
+use base64::{
+    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+    Engine,
+};
 use log::{debug, error};
 use std::process::{Command, Stdio};
 use tauri::{command, AppHandle};
@@ -151,6 +155,9 @@ fn parse_duration_text(text: &str) -> Option<f64> {
 
 fn extract_video_id(input: &str) -> String {
     let trimmed = input.trim();
+    if let Some(id) = trimmed.strip_prefix("yt:") {
+        return id.trim().to_string();
+    }
     if let Some(idx) = trimmed.find("v=") {
         let rest = &trimmed[idx + 2..];
         let end = rest.find(['&', '#', '?']).unwrap_or(rest.len());
@@ -160,6 +167,35 @@ fn extract_video_id(input: &str) -> String {
         let rest = &trimmed[idx + 9..];
         let end = rest.find(['&', '#', '?', '/']).unwrap_or(rest.len());
         return rest[..end].to_string();
+    }
+    trimmed.to_string()
+}
+
+fn normalize_stream_url(input: &str) -> String {
+    let trimmed = input.trim();
+    if let Some(id) = trimmed.strip_prefix("yt:") {
+        return format!("https://www.youtube.com/watch?v={}", id.trim());
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return trimmed.to_string();
+    }
+    if trimmed.len() == 11
+        && trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return format!("https://www.youtube.com/watch?v={trimmed}");
+    }
+    let decoded_bytes = URL_SAFE_NO_PAD
+        .decode(trimmed.trim_end_matches('='))
+        .or_else(|_| STANDARD.decode(trimmed));
+    if let Ok(bytes) = decoded_bytes {
+        if let Ok(decoded) = String::from_utf8(bytes) {
+            let candidate = decoded.trim();
+            if candidate.starts_with("http://") || candidate.starts_with("https://") {
+                return candidate.to_string();
+            }
+        }
     }
     trimmed.to_string()
 }
@@ -666,8 +702,15 @@ pub async fn ytdlp_get_stream(
     video_id: Option<String>,
 ) -> Result<YtdlpStreamInfo, String> {
     let resolved_url = match (url, video_id) {
-        (Some(url), _) => url,
-        (None, Some(id)) => format!("https://www.youtube.com/watch?v={}", id),
+        (Some(url), _) => normalize_stream_url(&url),
+        (None, Some(id)) => {
+            let normalized = normalize_stream_url(&id);
+            if normalized.starts_with("http://") || normalized.starts_with("https://") {
+                normalized
+            } else {
+                format!("https://www.youtube.com/watch?v={}", id.trim())
+            }
+        }
         (None, None) => return Err("Either url or video_id must be provided".to_string()),
     };
 
@@ -948,6 +991,53 @@ not json
                 build_args(&["--dump-json", "--no-warnings"], "-2-tGiD2MpU"),
                 vec!["--dump-json", "--no-warnings", "--", "-2-tGiD2MpU"]
             );
+        }
+    }
+
+    mod normalize_stream_url_tests {
+        use super::*;
+
+        #[test]
+        fn expands_yt_scheme_prefix() {
+            assert_eq!(
+                normalize_stream_url("yt:dQw4w9WgXcQ"),
+                "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+            );
+            assert_eq!(extract_video_id("yt:dQw4w9WgXcQ"), "dQw4w9WgXcQ");
+        }
+
+        #[test]
+        fn decodes_base64url_bandcamp_url() {
+            assert_eq!(
+                normalize_stream_url("aHR0cHM6Ly9sdWtlc3N0YXJzLmJhbmRjYW1wLmNvbS90cmFjay9taXNlcnk"),
+                "https://lukesstars.bandcamp.com/track/misery"
+            );
+        }
+
+        #[test]
+        fn decodes_padded_standard_base64_url() {
+            let encoded = STANDARD.encode("https://example.org/track?id=42");
+            assert_eq!(
+                normalize_stream_url(&encoded),
+                "https://example.org/track?id=42"
+            );
+        }
+
+        #[test]
+        fn expands_bare_eleven_char_youtube_id() {
+            assert_eq!(
+                normalize_stream_url("-2-tGiD2MpU"),
+                "https://www.youtube.com/watch?v=-2-tGiD2MpU"
+            );
+        }
+
+        #[test]
+        fn passes_through_http_urls_and_non_url_strings() {
+            assert_eq!(
+                normalize_stream_url("  https://soundcloud.com/artist/track  "),
+                "https://soundcloud.com/artist/track"
+            );
+            assert_eq!(normalize_stream_url("not-a-valid-url"), "not-a-valid-url");
         }
     }
 }

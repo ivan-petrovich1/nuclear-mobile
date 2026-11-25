@@ -47,13 +47,25 @@ export class MediaSourceAttachment {
   }
 
   detach(audio: HTMLAudioElement | null): void {
+    const hadObjectUrl = Boolean(this.objectUrl);
     if (this.objectUrl) {
       URL.revokeObjectURL(this.objectUrl);
       this.objectUrl = null;
     }
 
-    if (audio && audio.srcObject) {
-      audio.srcObject = null;
+    if (audio) {
+      try {
+        audio.pause();
+        if (audio.srcObject) {
+          audio.srcObject = null;
+        }
+        if (hadObjectUrl) {
+          audio.removeAttribute('src');
+          audio.load();
+        }
+      } catch {
+        // Ignore detach errors on disposed elements
+      }
     }
 
     this.endStream();

@@ -455,18 +455,24 @@ export const useP2pSyncStore = create<P2pSyncStoreState>()(
             headers: { 'x-nuclear-pin': target.pin },
           });
           if (res.status < 200 || res.status >= 300) {
-            set({ remoteState: null });
+            if (get().remoteState !== null) {
+              set({ remoteState: null });
+            }
             return null;
           }
           const parsed = JSON.parse(res.body) as RemotePlaybackState;
           if (!parsed || typeof parsed.deviceName !== 'string') {
-            set({ remoteState: null });
+            if (get().remoteState !== null) {
+              set({ remoteState: null });
+            }
             return null;
           }
           set({ remoteState: parsed });
           return parsed;
         } catch {
-          set({ remoteState: null });
+          if (get().remoteState !== null) {
+            set({ remoteState: null });
+          }
           return null;
         }
       },
@@ -830,15 +836,85 @@ export const initP2pSync = () => {
   });
   pushPlaybackThrottled(true);
 
-  // Poll paired peer's live playback state every 2.5s while app is visible
-  window.setInterval(() => {
-    if (document.visibilityState === 'visible') {
-      const p2p = useP2pSyncStore.getState();
-      if (p2p.peerAddress.trim()) {
-        void p2p.pollRemoteState();
+  // Poll paired peer's live playback state with exponential backoff & in-flight guard
+  let pollTimer: number | null = null;
+  let pollInFlight = false;
+  let consecutivePollFailures = 0;
+
+  const schedulePoll = (delayMs: number) => {
+    if (pollTimer !== null) {
+      window.clearTimeout(pollTimer);
+    }
+    pollTimer = window.setTimeout(() => {
+      pollTimer = null;
+      void runPollCycle();
+    }, delayMs);
+  };
+
+  const runPollCycle = async () => {
+    const p2p = useP2pSyncStore.getState();
+    if (
+      document.visibilityState !== 'visible' ||
+      !p2p.enabled ||
+      !p2p.peerAddress.trim()
+    ) {
+      return;
+    }
+    if (pollInFlight) {
+      schedulePoll(2500);
+      return;
+    }
+    pollInFlight = true;
+    let nextDelay = 2500;
+    try {
+      const remote = await p2p.pollRemoteState();
+      if (remote) {
+        consecutivePollFailures = 0;
+        nextDelay = 2500;
+      } else {
+        consecutivePollFailures += 1;
+        nextDelay = Math.min(
+          60_000,
+          2500 * 2 ** Math.min(consecutivePollFailures, 5),
+        );
+      }
+    } finally {
+      pollInFlight = false;
+      const latest = useP2pSyncStore.getState();
+      if (
+        document.visibilityState === 'visible' &&
+        latest.enabled &&
+        latest.peerAddress.trim()
+      ) {
+        schedulePoll(nextDelay);
       }
     }
-  }, 2500);
+  };
+
+  let prevEnabled = useP2pSyncStore.getState().enabled;
+  let prevPeerAddress = useP2pSyncStore.getState().peerAddress;
+  useP2pSyncStore.subscribe((s) => {
+    if (s.enabled !== prevEnabled || s.peerAddress !== prevPeerAddress) {
+      prevEnabled = s.enabled;
+      prevPeerAddress = s.peerAddress;
+      consecutivePollFailures = 0;
+      if (pollTimer !== null) {
+        window.clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+      if (
+        document.visibilityState === 'visible' &&
+        s.enabled &&
+        s.peerAddress.trim()
+      ) {
+        schedulePoll(250);
+      }
+    }
+  });
+
+  if (prevEnabled && prevPeerAddress.trim()) {
+    schedulePoll(2500);
+  }
 
   // Seamless Auto-Handoff: when you open/focus this device while your other device is playing,
   // automatically pull playback here without touching anything!
@@ -849,7 +925,7 @@ export const initP2pSync = () => {
       return;
     }
     const p2p = useP2pSyncStore.getState();
-    if (!p2p.seamlessHandoff || !p2p.peerAddress.trim()) {
+    if (!p2p.enabled || !p2p.seamlessHandoff || !p2p.peerAddress.trim()) {
       return;
     }
     if (useSoundStore.getState().status === 'playing') {
@@ -863,10 +939,17 @@ export const initP2pSync = () => {
   };
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
+      consecutivePollFailures = 0;
+      schedulePoll(250);
       void trySeamlessAutoPull();
+    } else if (pollTimer !== null) {
+      window.clearTimeout(pollTimer);
+      pollTimer = null;
     }
   });
   window.addEventListener('focus', () => {
+    consecutivePollFailures = 0;
+    schedulePoll(250);
     void trySeamlessAutoPull();
   });
 

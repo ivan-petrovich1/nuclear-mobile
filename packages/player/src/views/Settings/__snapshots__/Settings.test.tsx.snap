@@ -1705,6 +1705,39 @@ exports[`Settings view > (Snapshot) renders the settings view 1`] = `
                                     Download and install updates automatically when available
                                   </p>
                                 </div>
+                                <div
+                                  class="flex flex-col gap-2"
+                                >
+                                  <div
+                                    class="flex items-center gap-3"
+                                  >
+                                    <button
+                                      aria-checked="true"
+                                      aria-label="Share anonymous usage count"
+                                      class="border-border focus:ring-ring focus:ring-offset-muted relative inline-flex h-6 w-11 cursor-pointer items-center rounded-full border-(length:--border-width) transition-all focus:ring-2 focus:ring-offset-2 focus:outline-none data-checked:surface-primary surface-input data-disabled:cursor-not-allowed data-disabled:opacity-50 group"
+                                      data-checked=""
+                                      data-headlessui-state="checked"
+                                      id="headlessui-switch-:r1g:"
+                                      role="switch"
+                                      tabindex="0"
+                                      type="button"
+                                    >
+                                      <span
+                                        class="border-border bg-muted [&>svg]:fill-muted pointer-events-none flex h-4 w-4 items-center justify-center rounded-full border-(length:--border-width) ring-0 transition-transform translate-x-1 group-data-checked:translate-x-5"
+                                      />
+                                    </button>
+                                    <span
+                                      class="text-foreground text-sm font-semibold"
+                                    >
+                                      Share anonymous usage count
+                                    </span>
+                                  </div>
+                                  <p
+                                    class="text-foreground/60 text-sm select-none"
+                                  >
+                                    Send an anonymous install & daily active counter ping (no personal data, songs, playlists, or device IDs are ever collected)
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           </section>

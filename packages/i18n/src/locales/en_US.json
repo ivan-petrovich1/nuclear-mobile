@@ -471,6 +471,10 @@
       "autoInstall": {
         "title": "Auto-install updates",
         "description": "Download and install updates automatically when available"
+      },
+      "anonymousStats": {
+        "title": "Share anonymous usage count",
+        "description": "Send an anonymous install & daily active counter ping (no personal data, songs, playlists, or device IDs are ever collected)"
       }
     },
     "integrations": {

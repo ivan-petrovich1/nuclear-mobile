@@ -38,7 +38,7 @@ export const useStreamRecovery = (maxAttemptsPerItem = 2): void => {
       );
 
       await streamResolution.resolveWithFreshStreams(item, {
-        autoPlay: true,
+        autoPlay: useSoundStore.getState().status === 'playing',
         startPositionSeconds: useSoundStore.getState().seek,
       });
     });

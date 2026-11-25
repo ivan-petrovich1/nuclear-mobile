@@ -51,6 +51,7 @@ import { useP2pSyncStore } from '../services/p2pSync';
 import { playbackManager } from '../services/playback';
 import { shareTrack } from '../services/shareService';
 import { resolveAllProviderCandidates } from '../services/streamingHost';
+import { isOfflineBypassed } from '../services/streamResolution/offlineBypass';
 import {
   shareTrackVibeCard,
   shareWrappedCard,
@@ -60,6 +61,7 @@ import {
   computeListeningStreak,
   useWrappedStatsStore,
 } from '../services/wrappedStats';
+import { useCustomWallpaperStore } from '../stores/customWallpaperStore';
 import { getTrackDownloadKey, useDownloadStore } from '../stores/downloadStore';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { useQueueStore } from '../stores/queue/queueStore';
@@ -68,6 +70,7 @@ import { useUpdaterStore } from '../stores/updaterStore';
 import { AudioDspPanel } from './AudioDspPanel';
 import { BeatVisualizer } from './BeatVisualizer';
 import { ConnectedStreamVerification } from './ConnectedStreamVerification';
+import { CustomWallpaperSection } from './CustomWallpaperSection';
 import { FakeBankModal } from './FakeBankModal';
 import { LiveLyricTicker } from './LiveLyricTicker';
 import { P2pSyncPanel } from './P2pSyncPanel';
@@ -125,6 +128,7 @@ export const MobileAndroidShell: FC = () => {
     useCoreSetting<boolean>('playback.exportDownloadsToPublicFolder');
 
   const trackActions = useTrackActions();
+  const customWallpaper = useCustomWallpaperStore();
   const downloadedItems = useDownloadStore((s) => s.items);
   const downloadingKeys = useDownloadStore((s) => s.downloadingKeys);
   const downloadTrack = useDownloadStore((s) => s.downloadTrack);
@@ -194,6 +198,7 @@ export const MobileAndroidShell: FC = () => {
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const activeLyricRef = useRef<HTMLButtonElement | null>(null);
   const lastArtTapRef = useRef<number>(0);
+  const autoSearchedStreamItemRef = useRef<string | null>(null);
 
   // Touch gesture state for Mini-Player & Full-Screen Sheet
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -360,6 +365,54 @@ export const MobileAndroidShell: FC = () => {
       });
     }
   }, [activeLyricIndex, nowPlayingOpen, nowPlayingTab]);
+
+  const handleSearchAllStreams = async (silentEmpty = false) => {
+    if (!track || !currentItem || searchingAllStreams) {
+      return;
+    }
+    setSearchingAllStreams(true);
+    try {
+      const all = await resolveAllProviderCandidates(track);
+      if (all.length === 0) {
+        if (!silentEmpty) {
+          toast.info('No additional streams found across sources');
+        }
+      } else {
+        const existing = track.streamCandidates ?? [];
+        const seen = new Set(
+          existing.map((c) => `${c.source?.provider ?? 'default'}:${c.id}`),
+        );
+        const extras = all.filter(
+          (c) => !seen.has(`${c.source?.provider ?? 'default'}:${c.id}`),
+        );
+        const combined = [...existing, ...extras];
+        useQueueStore.getState().updateItemState(currentItem.id, {
+          track: { ...track, streamCandidates: combined },
+        });
+        if (!silentEmpty) {
+          toast.success(
+            `Found ${combined.length} stream${combined.length === 1 ? '' : 's'} across sources`,
+          );
+        }
+      }
+    } finally {
+      setSearchingAllStreams(false);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      streamPickerOpen &&
+      currentItem &&
+      track &&
+      (track.streamCandidates?.length ?? 0) <= 1 &&
+      !searchingAllStreams &&
+      autoSearchedStreamItemRef.current !== currentItem.id
+    ) {
+      autoSearchedStreamItemRef.current = currentItem.id;
+      void handleSearchAllStreams(true);
+    }
+  }, [streamPickerOpen, currentItem?.id]);
 
   const handleArtTap = () => {
     const now = Date.now();
@@ -1043,6 +1096,8 @@ export const MobileAndroidShell: FC = () => {
                 </label>
               </div>
 
+              <CustomWallpaperSection compact />
+
               {/* Downloaded Songs List */}
               <div>
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -1128,13 +1183,25 @@ export const MobileAndroidShell: FC = () => {
       {nowPlayingOpen && (
         <div
           className="animate-in slide-in-from-bottom-6 fixed inset-0 z-50 flex flex-col overflow-hidden pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(3.5rem,env(safe-area-inset-bottom))] duration-200 select-none"
-          style={{
-            background: oledBlackMode
-              ? `radial-gradient(circle at 50% 18%, ${dominantColor}44 0%, #000000 70%)`
-              : `radial-gradient(circle at 50% 18%, ${dominantColor}66 0%, var(--background) 75%)`,
-            backgroundColor: oledBlackMode ? '#000000' : 'var(--background)',
-            color: oledBlackMode ? '#ffffff' : 'var(--foreground)',
-          }}
+          style={
+            customWallpaper.enabled && customWallpaper.imageDataUrl
+              ? {
+                  backgroundImage: `linear-gradient(rgba(0, 0, 0, ${Math.max(0.35, customWallpaper.dim)}), rgba(0, 0, 0, ${Math.max(0.5, customWallpaper.dim)})), url("${customWallpaper.imageDataUrl.replace(/["\\\r\n]/g, '')}")`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundColor: '#000000',
+                  color: '#ffffff',
+                }
+              : {
+                  background: oledBlackMode
+                    ? `radial-gradient(circle at 50% 18%, ${dominantColor}44 0%, #000000 70%)`
+                    : `radial-gradient(circle at 50% 18%, ${dominantColor}66 0%, var(--background) 75%)`,
+                  backgroundColor: oledBlackMode
+                    ? '#000000'
+                    : 'var(--background)',
+                  color: oledBlackMode ? '#ffffff' : 'var(--foreground)',
+                }
+          }
         >
           {/* Drag Handle Pill (swipe down to dismiss) */}
           <div
@@ -1940,37 +2007,9 @@ export const MobileAndroidShell: FC = () => {
             <div className="px-4 pt-3">
               <button
                 disabled={searchingAllStreams}
-                onClick={async () => {
+                onClick={() => {
                   haptic('medium');
-                  setSearchingAllStreams(true);
-                  try {
-                    const all = await resolveAllProviderCandidates(track);
-                    if (all.length === 0) {
-                      toast.info('No additional streams found across sources');
-                    } else {
-                      const existing = track.streamCandidates ?? [];
-                      const seen = new Set(
-                        existing.map(
-                          (c) => `${c.source?.provider ?? 'default'}:${c.id}`,
-                        ),
-                      );
-                      const extras = all.filter(
-                        (c) =>
-                          !seen.has(
-                            `${c.source?.provider ?? 'default'}:${c.id}`,
-                          ),
-                      );
-                      const combined = [...existing, ...extras];
-                      useQueueStore.getState().updateItemState(currentItem.id, {
-                        track: { ...track, streamCandidates: combined },
-                      });
-                      toast.success(
-                        `Found ${combined.length} stream${combined.length === 1 ? '' : 's'} across sources`,
-                      );
-                    }
-                  } finally {
-                    setSearchingAllStreams(false);
-                  }
+                  void handleSearchAllStreams(false);
                 }}
                 className="bg-primary text-primary-foreground flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-extrabold shadow transition active:scale-95 disabled:opacity-60"
               >
@@ -1990,12 +2029,16 @@ export const MobileAndroidShell: FC = () => {
             <div className="flex-1 space-y-1.5 overflow-y-auto p-4">
               {(track.streamCandidates ?? []).length === 0 ? (
                 <div className="rounded-xl border border-dashed p-6 text-center text-xs opacity-70">
-                  No cached stream candidates yet. Tap{' '}
-                  <strong>Search All Streaming Sources</strong> above!
+                  {searchingAllStreams
+                    ? 'Searching all streaming sources...'
+                    : 'No cached stream candidates yet. Tap Search All Streaming Sources above!'}
                 </div>
               ) : (
                 (track.streamCandidates ?? []).map((cand, idx) => {
-                  const isActive = idx === 0 && !cand.failed;
+                  const isActive =
+                    idx === 0 &&
+                    !cand.failed &&
+                    !(isTrackDownloaded && !isOfflineBypassed(currentItem.id));
                   const providerLabel =
                     cand.source?.provider?.replace(/^nuclear:/, '') || 'stream';
                   return (

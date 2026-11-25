@@ -21,7 +21,9 @@ import { initMpdHandler } from './services/mpd';
 import { initPlaybackEventBridge } from './services/playbackEventBridge';
 import { hydratePluginsFromRegistry } from './services/plugins/pluginBootstrap';
 import { providersHost } from './services/providersHost';
+import { reportAnonymousUsage } from './services/telemetryService';
 import { ytdlpHost } from './services/ytdlpHost';
+import { initializeCustomWallpaperStore } from './stores/customWallpaperStore';
 import { initializeDownloadStore } from './stores/downloadStore';
 import { initializeFavoritesStore } from './stores/favoritesStore';
 import { initializePlaylistStore } from './stores/playlistStore';
@@ -88,6 +90,7 @@ const initializeStores = () =>
   initializeSettingsStore()
     .then(() => initializeShortcutsStore())
     .then(() => initializeDownloadStore())
+    .then(() => initializeCustomWallpaperStore().catch(() => {}))
     .then(() => initializeQueueStore())
     .then(() => initializeFavoritesStore())
     .then(() => initializeStreamVerificationStore())
@@ -124,6 +127,7 @@ const startBackgroundTasks = () => {
     .getState()
     .checkForUpdate()
     .catch(() => {});
+  void reportAnonymousUsage().catch(() => {});
 };
 
 export const initPlayerApp = async (

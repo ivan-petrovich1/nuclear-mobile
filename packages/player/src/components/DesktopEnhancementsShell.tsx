@@ -48,6 +48,7 @@ import { useP2pSyncStore } from '../services/p2pSync';
 import { playbackManager } from '../services/playback';
 import { shareTrack } from '../services/shareService';
 import { resolveAllProviderCandidates } from '../services/streamingHost';
+import { isOfflineBypassed } from '../services/streamResolution/offlineBypass';
 import {
   shareTrackVibeCard,
   shareWrappedCard,
@@ -57,12 +58,15 @@ import {
   computeListeningStreak,
   useWrappedStatsStore,
 } from '../services/wrappedStats';
+import { useCustomWallpaperStore } from '../stores/customWallpaperStore';
 import { getTrackDownloadKey, useDownloadStore } from '../stores/downloadStore';
 import { usePlaylistStore } from '../stores/playlistStore';
 import { useQueueStore } from '../stores/queue/queueStore';
 import { useSoundStore } from '../stores/soundStore';
 import { AudioDspPanel } from './AudioDspPanel';
 import { BeatVisualizer } from './BeatVisualizer';
+import { ConnectedStreamVerification } from './ConnectedStreamVerification';
+import { CustomWallpaperSection } from './CustomWallpaperSection';
 import { FakeBankModal } from './FakeBankModal';
 import { P2pSyncPanel } from './P2pSyncPanel';
 import { SpotifyAccountSyncPanel } from './SpotifyAccountSyncPanel';
@@ -107,6 +111,7 @@ export const DesktopEnhancementsShell: FC = () => {
     useCoreSetting<boolean>('playback.exportDownloadsToPublicFolder');
 
   const trackActions = useTrackActions();
+  const customWallpaper = useCustomWallpaperStore();
   const downloadedItems = useDownloadStore((s) => s.items);
   const downloadingKeys = useDownloadStore((s) => s.downloadingKeys);
   const downloadTrack = useDownloadStore((s) => s.downloadTrack);
@@ -170,6 +175,7 @@ export const DesktopEnhancementsShell: FC = () => {
   const backupInputRef = useRef<HTMLInputElement | null>(null);
   const activeLyricRef = useRef<HTMLButtonElement | null>(null);
   const lastArtClickRef = useRef<number>(0);
+  const autoSearchedStreamItemRef = useRef<string | null>(null);
 
   const track = currentItem?.track;
   const coverUrl = track
@@ -247,6 +253,54 @@ export const DesktopEnhancementsShell: FC = () => {
       });
     }
   }, [activeLyricIndex, nowPlayingOpen, nowPlayingTab]);
+
+  const handleSearchAllStreams = async (silentEmpty = false) => {
+    if (!track || !currentItem || searchingAllStreams) {
+      return;
+    }
+    setSearchingAllStreams(true);
+    try {
+      const all = await resolveAllProviderCandidates(track);
+      if (all.length === 0) {
+        if (!silentEmpty) {
+          toast.info('No additional streams found across sources');
+        }
+      } else {
+        const existing = track.streamCandidates ?? [];
+        const seen = new Set(
+          existing.map((c) => `${c.source?.provider ?? 'default'}:${c.id}`),
+        );
+        const extras = all.filter(
+          (c) => !seen.has(`${c.source?.provider ?? 'default'}:${c.id}`),
+        );
+        const combined = [...existing, ...extras];
+        useQueueStore.getState().updateItemState(currentItem.id, {
+          track: { ...track, streamCandidates: combined },
+        });
+        if (!silentEmpty) {
+          toast.success(
+            `Found ${combined.length} stream${combined.length === 1 ? '' : 's'} across sources`,
+          );
+        }
+      }
+    } finally {
+      setSearchingAllStreams(false);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      desktopStreamPickerOpen &&
+      currentItem &&
+      track &&
+      (track.streamCandidates?.length ?? 0) <= 1 &&
+      !searchingAllStreams &&
+      autoSearchedStreamItemRef.current !== currentItem.id
+    ) {
+      autoSearchedStreamItemRef.current = currentItem.id;
+      void handleSearchAllStreams(true);
+    }
+  }, [desktopStreamPickerOpen, currentItem?.id]);
 
   const handleLocalAudioFiles = (files: FileList | null) => {
     if (!files || files.length === 0) {
@@ -711,6 +765,8 @@ export const DesktopEnhancementsShell: FC = () => {
                     </label>
                   </div>
 
+                  <CustomWallpaperSection compact />
+
                   <div>
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <h3 className="text-sm font-bold">
@@ -794,13 +850,25 @@ export const DesktopEnhancementsShell: FC = () => {
         <div
           data-testid="desktop-now-playing-overlay"
           className="fixed inset-0 z-50 flex flex-col overflow-hidden"
-          style={{
-            background: oledBlackMode
-              ? `radial-gradient(circle at 50% 18%, ${dominantColor}44 0%, #000000 70%)`
-              : `radial-gradient(circle at 50% 18%, ${dominantColor}66 0%, var(--background) 75%)`,
-            backgroundColor: oledBlackMode ? '#000000' : 'var(--background)',
-            color: oledBlackMode ? '#ffffff' : 'var(--foreground)',
-          }}
+          style={
+            customWallpaper.enabled && customWallpaper.imageDataUrl
+              ? {
+                  backgroundImage: `linear-gradient(rgba(0, 0, 0, ${Math.max(0.35, customWallpaper.dim)}), rgba(0, 0, 0, ${Math.max(0.5, customWallpaper.dim)})), url("${customWallpaper.imageDataUrl.replace(/["\\\r\n]/g, '')}")`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundColor: '#000000',
+                  color: '#ffffff',
+                }
+              : {
+                  background: oledBlackMode
+                    ? `radial-gradient(circle at 50% 18%, ${dominantColor}44 0%, #000000 70%)`
+                    : `radial-gradient(circle at 50% 18%, ${dominantColor}66 0%, var(--background) 75%)`,
+                  backgroundColor: oledBlackMode
+                    ? '#000000'
+                    : 'var(--background)',
+                  color: oledBlackMode ? '#ffffff' : 'var(--foreground)',
+                }
+          }
         >
           <div className="mx-auto flex w-full max-w-4xl items-center justify-between px-6 py-4">
             <button
@@ -1477,37 +1545,7 @@ export const DesktopEnhancementsShell: FC = () => {
               <button
                 type="button"
                 disabled={searchingAllStreams}
-                onClick={async () => {
-                  setSearchingAllStreams(true);
-                  try {
-                    const all = await resolveAllProviderCandidates(track);
-                    if (all.length === 0) {
-                      toast.info('No additional streams found across sources');
-                    } else {
-                      const existing = track.streamCandidates ?? [];
-                      const seen = new Set(
-                        existing.map(
-                          (c) => `${c.source?.provider ?? 'default'}:${c.id}`,
-                        ),
-                      );
-                      const extras = all.filter(
-                        (c) =>
-                          !seen.has(
-                            `${c.source?.provider ?? 'default'}:${c.id}`,
-                          ),
-                      );
-                      const combined = [...existing, ...extras];
-                      useQueueStore.getState().updateItemState(currentItem.id, {
-                        track: { ...track, streamCandidates: combined },
-                      });
-                      toast.success(
-                        `Found ${combined.length} stream${combined.length === 1 ? '' : 's'} across sources`,
-                      );
-                    }
-                  } finally {
-                    setSearchingAllStreams(false);
-                  }
-                }}
+                onClick={() => void handleSearchAllStreams(false)}
                 className="bg-primary text-primary-foreground flex w-full items-center justify-center gap-2 rounded-xl py-2 text-xs font-extrabold shadow transition disabled:opacity-60"
               >
                 {searchingAllStreams ? (
@@ -1526,12 +1564,16 @@ export const DesktopEnhancementsShell: FC = () => {
             <div className="flex-1 space-y-1.5 overflow-y-auto p-4">
               {(track.streamCandidates ?? []).length === 0 ? (
                 <div className="rounded-xl border border-dashed p-6 text-center text-xs opacity-70">
-                  No cached stream candidates yet. Click{' '}
-                  <strong>Search All Streaming Sources</strong> above!
+                  {searchingAllStreams
+                    ? 'Searching all streaming sources...'
+                    : 'No cached stream candidates yet. Click Search All Streaming Sources above!'}
                 </div>
               ) : (
                 (track.streamCandidates ?? []).map((cand, idx) => {
-                  const isActive = idx === 0 && !cand.failed;
+                  const isActive =
+                    idx === 0 &&
+                    !cand.failed &&
+                    !(isTrackDownloaded && !isOfflineBypassed(currentItem.id));
                   const providerLabel =
                     cand.source?.provider?.replace(/^nuclear:/, '') || 'stream';
                   return (
@@ -1578,6 +1620,10 @@ export const DesktopEnhancementsShell: FC = () => {
                   );
                 })
               )}
+            </div>
+
+            <div className="shrink-0">
+              <ConnectedStreamVerification />
             </div>
           </div>
         </div>

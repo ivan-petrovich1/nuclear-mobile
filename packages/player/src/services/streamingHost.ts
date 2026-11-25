@@ -19,6 +19,17 @@ export const hasActiveStreamingProvider = (): boolean =>
   Boolean(getActiveStreamingProvider());
 
 export const isStreamExpired = (candidate: StreamCandidate): boolean => {
+  const url = candidate.stream?.url;
+  if (url) {
+    const match = /[?&]expire=(\d+)/.exec(url);
+    if (match) {
+      const expireMs = Number.parseInt(match[1], 10) * 1000;
+      if (Number.isFinite(expireMs) && Date.now() >= expireMs - 60_000) {
+        return true;
+      }
+    }
+  }
+
   if (!candidate.lastResolvedAtIso) {
     return false;
   }

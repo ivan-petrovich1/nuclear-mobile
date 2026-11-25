@@ -5,7 +5,7 @@ import type { StreamingProvider } from '@nuclearplayer/plugin-sdk';
 
 import { useSettingsStore } from '../stores/settingsStore';
 import { providersHost } from './providersHost';
-import { createStreamingHost } from './streamingHost';
+import { createStreamingHost, isStreamExpired } from './streamingHost';
 
 describe('streamingHost', () => {
   let streamingHost: ReturnType<typeof createStreamingHost>;
@@ -415,6 +415,36 @@ describe('streamingHost', () => {
 
       expect(getStreamUrl).toHaveBeenCalledWith('candidate-1');
       expect(result!.stream).toEqual(newStream);
+    });
+  });
+
+  describe('isStreamExpired', () => {
+    it('flags googlevideo URLs whose expire= query param is past or within 60s', () => {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const expiringSoon: StreamCandidate = {
+        id: 'vid-soon',
+        title: 'Soon Expired',
+        source: { provider: 'youtube', id: 'vid-soon' },
+        failed: false,
+        lastResolvedAtIso: new Date().toISOString(),
+        stream: {
+          url: `https://rr1---sn.googlevideo.com/videoplayback?expire=${nowSec + 30}&itag=140`,
+          protocol: 'https',
+          source: { provider: 'youtube', id: 'vid-soon' },
+        },
+      };
+      const stillFresh: StreamCandidate = {
+        ...expiringSoon,
+        id: 'vid-fresh',
+        stream: {
+          url: `https://rr1---sn.googlevideo.com/videoplayback?expire=${nowSec + 3600}&itag=140`,
+          protocol: 'https',
+          source: { provider: 'youtube', id: 'vid-fresh' },
+        },
+      };
+
+      expect(isStreamExpired(expiringSoon)).toBe(true);
+      expect(isStreamExpired(stillFresh)).toBe(false);
     });
   });
 });

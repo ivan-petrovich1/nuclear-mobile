@@ -300,4 +300,34 @@ describe('checkAndUpdatePlugins', () => {
     );
     expect(plugins.getPlugin('disabled-plugin')?.enabled).toBe(false);
   });
+
+  it('updates an outdated registry plugin even when not currently loaded in pluginStore', async () => {
+    logWarn.mockClear();
+    useSettingsStore.getState().setValue('core.plugins.autoUpdate', true);
+    await seedPlugin({ id: 'unloaded-plugin' });
+    usePluginStore.setState({ plugins: {} });
+
+    FetchMock.get('plugin-registry', {
+      version: 1,
+      plugins: [
+        new MarketplacePluginBuilder()
+          .withId('unloaded-plugin')
+          .withVersion('2.0.0')
+          .withDownloadUrl('https://example.com/unloaded-plugin.zip')
+          .build(),
+      ],
+    });
+
+    createPluginFolder(`${DOWNLOAD_BASE}/unloaded-plugin`, {
+      id: 'unloaded-plugin',
+      version: '2.0.0',
+    });
+
+    await checkAndUpdatePlugins();
+
+    expect(
+      usePluginStore.getState().getPlugin('unloaded-plugin')?.metadata.version,
+    ).toBe('2.0.0');
+    expect(logWarn).not.toHaveBeenCalled();
+  });
 });

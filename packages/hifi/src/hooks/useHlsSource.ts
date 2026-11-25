@@ -64,6 +64,7 @@ export const useHlsSource = (
 
   useEffect(() => {
     return () => {
+      prevUrl.current = null;
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;

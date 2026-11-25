@@ -2,6 +2,7 @@ import { StallDetector } from './StallDetector';
 
 const GAP_DETECTION_THRESHOLD_SECONDS = 0.5;
 const BROWSER_GAP_TOLERANCE_SECONDS = 0.001;
+const MAX_GAP_JUMP_SECONDS = 1.0;
 const GAP_JUMP_POLL_INTERVAL_MS = 250;
 
 export class GapJumpController {
@@ -54,6 +55,10 @@ export class GapJumpController {
       }
 
       if (rangeStart - currentTime < BROWSER_GAP_TOLERANCE_SECONDS) {
+        return;
+      }
+
+      if (rangeStart - previousRangeEnd > MAX_GAP_JUMP_SECONDS) {
         return;
       }
 

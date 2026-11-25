@@ -69,6 +69,9 @@ export type DownloadedTrackInfo = {
   durationMs?: number;
   container?: string;
   codec?: string;
+  streamId?: string;
+  provider?: string;
+  candidateTitle?: string;
   downloadedAtIso: string;
 };
 
@@ -88,22 +91,26 @@ type DownloadStoreState = {
 };
 
 export const getTrackDownloadKey = (track: Track): string => {
-  const artist = (track.artists?.[0]?.name ?? 'unknown')
+  const rawArtist = (track.artists?.[0]?.name ?? 'unknown')
     .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '_');
-  const title = (track.title ?? 'unknown')
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '_');
-  const raw = `${artist}__${title}`;
+    .trim();
+  const rawTitle = (track.title ?? 'unknown').toLowerCase().trim();
+  const raw = `${rawArtist}__${rawTitle}`;
   let hash = 2166136261;
   for (let i = 0; i < raw.length; i++) {
     hash ^= raw.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
   const hex = (hash >>> 0).toString(16).padStart(8, '0');
-  return `${raw.slice(0, 48)}_${hex}`;
+  const safeArtist = rawArtist
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const safeTitle = rawTitle
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const slug =
+    [safeArtist, safeTitle].filter(Boolean).join('__').slice(0, 48) || 'track';
+  return `${slug}_${hex}`;
 };
 
 const resolveDownloadCandidates = async (
@@ -165,7 +172,42 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
       const saved =
         await store.get<Record<string, DownloadedTrackInfo>>('items');
       if (saved && typeof saved === 'object') {
-        set({ items: saved });
+        let changed = false;
+        const migrated: Record<string, DownloadedTrackInfo> = {};
+        for (const [existingKey, entry] of Object.entries(saved)) {
+          if (!entry || typeof entry !== 'object') {
+            continue;
+          }
+          if (/^_+_[0-9a-f]{8}$/.test(existingKey)) {
+            const firstArtist =
+              entry.artist?.split(',')[0]?.trim() || 'unknown';
+            const newKey = getTrackDownloadKey({
+              title: entry.title,
+              artists: [
+                {
+                  name: firstArtist,
+                  roles: [],
+                  source: { provider: 'offline', id: existingKey },
+                },
+              ],
+              source: {
+                provider: entry.provider || 'offline',
+                id: entry.streamId || existingKey,
+              },
+            });
+            migrated[newKey] = {
+              ...entry,
+              key: newKey,
+            };
+            changed = true;
+          } else {
+            migrated[existingKey] = entry;
+          }
+        }
+        set({ items: migrated });
+        if (changed) {
+          await persistItems(migrated);
+        }
       }
     } catch {
       // Ignore on fresh install
@@ -278,6 +320,9 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
         durationMs: stream?.durationMs ?? downloadedFrom.durationMs,
         container: ext,
         codec: stream?.codec,
+        streamId: downloadedFrom.id,
+        provider: downloadedFrom.source?.provider,
+        candidateTitle: downloadedFrom.title,
         downloadedAtIso: new Date().toISOString(),
       };
 

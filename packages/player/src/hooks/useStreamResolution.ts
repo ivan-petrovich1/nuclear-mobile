@@ -3,12 +3,18 @@ import { useEffect, useRef } from 'react';
 import type { QueueItem } from '@nuclearplayer/model';
 
 import { streamResolution } from '../services/streamResolution';
+import { isOfflineBypassed } from '../services/streamResolution/offlineBypass';
 import { useQueueStore } from '../stores/queue/queueStore';
 import { useStreamRecovery } from './useStreamRecovery';
 
 const buildResolutionKey = (item: QueueItem): string => {
   const headCandidate = item.track.streamCandidates?.[0];
-  return [item.id, headCandidate?.id, headCandidate?.failed].join(':');
+  return [
+    item.id,
+    headCandidate?.id,
+    headCandidate?.failed,
+    isOfflineBypassed(item.id),
+  ].join(':');
 };
 
 export const useStreamResolution = (): void => {

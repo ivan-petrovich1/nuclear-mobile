@@ -8,6 +8,10 @@ import { stripResolutionState } from '@nuclearplayer/model';
 
 import { Logger } from '../../../services/logger';
 import { playbackSettings } from '../../../services/playbackSettings';
+import {
+  clearAllOfflineBypass,
+  clearOfflineBypass,
+} from '../../../services/streamResolution/offlineBypass';
 import { useSoundStore } from '../../soundStore';
 import { withPersistence } from '../persistence';
 import { PlayOrder } from '../playOrder';
@@ -126,6 +130,9 @@ export const createEditingSlice: StateCreator<
     if (currentItemRemoved || get().items.length === 0) {
       useSoundStore.getState().stop();
     }
+    for (const id of ids) {
+      clearOfflineBypass(id);
+    }
   }),
 
   removeByIndices: (indices: number[]) => {
@@ -138,6 +145,7 @@ export const createEditingSlice: StateCreator<
 
   clearQueue: withPersistence(get, () => {
     const itemCount = get().items.length;
+    clearAllOfflineBypass();
     set({
       items: [],
       currentIndex: 0,

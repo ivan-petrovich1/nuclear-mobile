@@ -15,6 +15,20 @@ const PORT_START: u16 = 9100;
 const PORT_END: u16 = 9109;
 
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36";
+const IOS_USER_AGENT: &str = "com.google.ios.youtube/20.03.02 (iPhone16,2; U; CPU iOS 18_2_1 like Mac OS X;)";
+const SAFARI_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+
+fn user_agent_for_url(url: &str) -> &'static str {
+    if url.contains("googlevideo.com") {
+        if url.contains("c=IOS") {
+            return IOS_USER_AGENT;
+        }
+        if url.contains("c=VISIONOS") || url.contains("c=TVHTML5") {
+            return SAFARI_USER_AGENT;
+        }
+    }
+    USER_AGENT
+}
 
 const FORWARD_HEADERS: &[header::HeaderName] = &[
     header::CONTENT_TYPE,
@@ -93,7 +107,9 @@ async fn proxy_stream(
         headers.get(header::RANGE)
     );
 
-    let mut upstream_request = client.get(&url);
+    let mut upstream_request = client
+        .get(&url)
+        .header(header::USER_AGENT, user_agent_for_url(&url));
     if let Some(range_value) = headers.get(header::RANGE) {
         upstream_request = upstream_request.header(header::RANGE, range_value);
     }
@@ -317,4 +333,35 @@ pub fn init_stream_server(app_handle: AppHandle) {
 #[specta::specta]
 pub fn stream_server_port(state: tauri::State<'_, StreamServerState>) -> u16 {
     state.port
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn picks_matching_user_agent_for_youtube_client_urls() {
+        assert_eq!(
+            user_agent_for_url("https://rr1---sn.googlevideo.com/videoplayback?c=IOS&itag=140"),
+            IOS_USER_AGENT
+        );
+        assert_eq!(
+            user_agent_for_url("https://rr1---sn.googlevideo.com/videoplayback?c=VISIONOS&itag=140"),
+            SAFARI_USER_AGENT
+        );
+        assert_eq!(
+            user_agent_for_url(
+                "https://rr1---sn.googlevideo.com/videoplayback?c=TVHTML5_SIMPLY_EMBEDDED_PLAYER"
+            ),
+            SAFARI_USER_AGENT
+        );
+        assert_eq!(
+            user_agent_for_url("https://rr1---sn.googlevideo.com/videoplayback?c=WEB&itag=140"),
+            USER_AGENT
+        );
+        assert_eq!(
+            user_agent_for_url("https://example.com/audio.mp3?c=IOS"),
+            USER_AGENT
+        );
+    }
 }

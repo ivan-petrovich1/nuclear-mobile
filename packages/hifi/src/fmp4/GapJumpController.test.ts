@@ -60,6 +60,19 @@ describe('GapJumpController', () => {
 
       expect(audio.currentTime).toBe(9.9999);
     });
+
+    it('does not jump across large unfetched gaps between buffered ranges', () => {
+      const controller = new GapJumpController();
+      const buffered = new MockTimeRanges();
+      buffered.addRange(0, 10.0);
+      buffered.addRange(18.0, 60);
+
+      const audio = createMockAudio(9.95, false);
+
+      controller.jumpGap(audio, buffered as TimeRanges);
+
+      expect(audio.currentTime).toBe(9.95);
+    });
   });
 
   describe('poll', () => {

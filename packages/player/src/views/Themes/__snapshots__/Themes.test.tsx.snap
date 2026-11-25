@@ -778,6 +778,79 @@ exports[`Themes view > (Snapshot) renders the themes view 1`] = `
                                 </div>
                               </section>
                               <div
+                                class="border-border bg-muted/40 mt-4 space-y-3 rounded-xl border p-4"
+                                data-testid="custom-wallpaper-section"
+                              >
+                                <input
+                                  accept="image/*"
+                                  class="hidden"
+                                  data-testid="custom-wallpaper-input"
+                                  type="file"
+                                />
+                                <div
+                                  class="flex flex-wrap items-center justify-between gap-2"
+                                >
+                                  <div
+                                    class="min-w-0"
+                                  >
+                                    <div
+                                      class="text-xs font-extrabold sm:text-sm"
+                                    >
+                                      🖼️ Custom Picture Theme & Background
+                                    </div>
+                                    <div
+                                      class="text-[11px] opacity-70"
+                                    >
+                                      Upload any photo, artwork, or GIF as your app theme background
+                                    </div>
+                                  </div>
+                                  <div
+                                    class="flex items-center gap-1.5"
+                                  >
+                                    <button
+                                      class="bg-primary text-primary-foreground inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold shadow transition active:scale-95 disabled:opacity-60"
+                                      data-testid="custom-wallpaper-upload-btn"
+                                      type="button"
+                                    >
+                                      <svg
+                                        aria-hidden="true"
+                                        class="lucide lucide-image-plus"
+                                        fill="none"
+                                        height="13"
+                                        stroke="currentColor"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        viewBox="0 0 24 24"
+                                        width="13"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                      >
+                                        <path
+                                          d="M16 5h6"
+                                        />
+                                        <path
+                                          d="M19 2v6"
+                                        />
+                                        <path
+                                          d="M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5"
+                                        />
+                                        <path
+                                          d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"
+                                        />
+                                        <circle
+                                          cx="9"
+                                          cy="9"
+                                          r="2"
+                                        />
+                                      </svg>
+                                      <span>
+                                        Upload Picture
+                                      </span>
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                              <div
                                 class="flex flex-col gap-4 md:flex-row"
                               >
                                 <section

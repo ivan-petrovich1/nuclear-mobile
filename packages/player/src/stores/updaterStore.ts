@@ -11,7 +11,7 @@ import { errorMessage } from '../utils/errorMessage';
 import { reportError } from '../utils/logging';
 import { getSetting } from './settingsStore';
 
-const CURRENT_RELEASE_VERSION = '1.0.8';
+export const CURRENT_RELEASE_VERSION = '1.0.9';
 const GITHUB_LATEST_RELEASE_URL =
   'https://api.github.com/repos/ivan-petrovich1/nuclear-mobile/releases/latest';
 
@@ -215,20 +215,17 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
     let tauriCheckError: unknown = null;
     let update: Update | null = null;
 
-    try {
-      update = await check();
-    } catch (error) {
-      tauriCheckError = error;
-    }
-
-    if (update === null && !isTestEnv) {
+    if (isTestEnv) {
+      try {
+        update = await check();
+      } catch (error) {
+        tauriCheckError = error;
+      }
+    } else {
       try {
         update = await checkGitHubReleaseFallback();
-        tauriCheckError = null;
       } catch (fallbackError) {
-        if (!tauriCheckError) {
-          tauriCheckError = fallbackError;
-        }
+        tauriCheckError = fallbackError;
       }
     }
 

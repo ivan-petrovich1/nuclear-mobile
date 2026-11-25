@@ -9,6 +9,19 @@ import { usePlaybackStatus } from './hooks/usePlaybackStatus';
 import { useStartPosition } from './hooks/useStartPosition';
 import { SoundProps } from './types';
 
+const teardownAudioElement = (audio: HTMLAudioElement): void => {
+  try {
+    audio.pause();
+    audio.muted = true;
+    audio.srcObject = null;
+    audio.removeAttribute('src');
+    audio.replaceChildren();
+    audio.load();
+  } catch {
+    // Ignore teardown errors on already-disposed elements
+  }
+};
+
 export const Sound: React.FC<SoundProps> = ({
   src,
   status,
@@ -24,6 +37,7 @@ export const Sound: React.FC<SoundProps> = ({
   onSourceInvalid,
 }) => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isMountedRef = useRef(true);
 
   useAudioSeek(audioRef, seek);
   useStartPosition(audioRef, src);
@@ -34,12 +48,33 @@ export const Sound: React.FC<SoundProps> = ({
 
   useEffect(() => {
     const audio = audioRef.current;
+    isMountedRef.current = true;
+    if (audio) {
+      audio.muted = false;
+    }
+    return () => {
+      isMountedRef.current = false;
+      if (audio) {
+        teardownAudioElement(audio);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
     if (!audio || volume === undefined) {
       return;
     }
 
     audio.volume = Math.max(0, Math.min(1, volume / 100));
   }, [volume]);
+
+  const handleEnded = useCallback(() => {
+    if (!isMountedRef.current) {
+      return;
+    }
+    onEnd?.();
+  }, [onEnd]);
 
   const handleCanPlay = useCallback(() => {
     onCanPlay?.();
@@ -61,7 +96,7 @@ export const Sound: React.FC<SoundProps> = ({
       preload={preload}
       crossOrigin={crossOrigin}
       onTimeUpdate={handleTimeUpdate}
-      onEnded={onEnd}
+      onEnded={handleEnded}
       onLoadStart={handleLoadStart}
       onCanPlay={handleCanPlay}
       onError={handleError}

@@ -585,10 +585,25 @@ const applyBestLyricsFromBatch = (
   return false;
 };
 
-const queryLrcLib = async (url: string): Promise<LrcLibResult[]> => {
+let lrcLibCooldownUntil = 0;
+
+const queryLrcLib = async (url: string): Promise<LrcLibResult[] | null> => {
+  if (Date.now() < lrcLibCooldownUntil) {
+    return null;
+  }
   const resp = await httpHost.fetch(url, {
-    headers: { 'User-Agent': 'NuclearPlayer/1.0.8' },
+    headers: { 'User-Agent': 'NuclearPlayer/1.0.9' },
   });
+  if (resp.status === 429 || resp.status >= 500) {
+    const retryRaw =
+      resp.headers?.['retry-after'] ?? resp.headers?.['Retry-After'];
+    const retrySec = retryRaw ? Number.parseInt(retryRaw, 10) : NaN;
+    const cooldownMs = Number.isFinite(retrySec)
+      ? Math.min(120_000, Math.max(5_000, retrySec * 1000))
+      : 30_000;
+    lrcLibCooldownUntil = Date.now() + cooldownMs;
+    return null;
+  }
   if (resp.status !== 200 || !resp.body) {
     return [];
   }
@@ -632,6 +647,9 @@ const fetchLyricsForTrack = async (itemId: string, track: Track) => {
         return;
       }
       const batch = await queryLrcLib(url);
+      if (batch === null) {
+        break;
+      }
       allResults.push(...batch);
       if (pickBestLrcCandidate(allResults, track, true)) {
         break;
@@ -715,10 +733,17 @@ const fetchSponsorBlockForVideo = async (videoId: string) => {
     }
     if (resp.status === 200 && resp.body) {
       const json = JSON.parse(resp.body) as Array<{
+        actionType?: string;
+        votes?: number;
         segment?: [number, number];
       }>;
       const segments = mergeSponsorSegments(
         json
+          .filter(
+            (entry) =>
+              (!entry.actionType || entry.actionType === 'skip') &&
+              (typeof entry.votes !== 'number' || entry.votes >= 1),
+          )
           .map((entry) => entry.segment)
           .filter(
             (seg): seg is [number, number] =>
@@ -777,6 +802,15 @@ const preResolveUpcomingTracks = async () => {
       if (!candidates?.length) {
         continue;
       }
+      {
+        const liveState = useQueueStore.getState();
+        if (
+          !liveState.getItemById(nextItem.id) ||
+          liveState.getCurrentItem()?.id === nextItem.id
+        ) {
+          continue;
+        }
+      }
       updateItemState(nextItem.id, {
         track: { ...nextItem.track, streamCandidates: candidates },
       });
@@ -784,6 +818,13 @@ const preResolveUpcomingTracks = async () => {
       if (head) {
         const resolved = await streamingHost.resolveStreamForCandidate(head);
         if (resolved && !resolved.failed && resolved.stream?.url) {
+          const liveState = useQueueStore.getState();
+          if (
+            !liveState.getItemById(nextItem.id) ||
+            liveState.getCurrentItem()?.id === nextItem.id
+          ) {
+            continue;
+          }
           updateCandidate(nextItem.id, resolved);
           useMobileEnhancementsStore.setState((s) => ({
             preResolvedIds: { ...s.preResolvedIds, [nextItem.id]: true },
@@ -806,13 +847,17 @@ type DspGraph = {
   loudnessGain: GainNode;
   masterVolumeGain: GainNode;
   panner: StereoPannerNode | null;
+  lfo: OscillatorNode | null;
   lfoGain: GainNode | null;
   normalGain: GainNode;
   karaokeGain: GainNode;
   analyser: AnalyserNode;
+  cleanupListeners: () => void;
 };
 
 const dspGraphs = new WeakMap<HTMLAudioElement, DspGraph>();
+let activeDspAudio: HTMLAudioElement | null = null;
+let activeDspGraph: DspGraph | null = null;
 let activeAnalyser: AnalyserNode | null = null;
 
 export const getAudioAnalyser = (): AnalyserNode | null => activeAnalyser;
@@ -820,10 +865,37 @@ export const getAudioAnalyser = (): AnalyserNode | null => activeAnalyser;
 const isAndroidDevice = () =>
   typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
+const disposeActiveDspGraph = () => {
+  if (!activeDspGraph) {
+    activeDspAudio = null;
+    activeAnalyser = null;
+    return;
+  }
+  const graph = activeDspGraph;
+  activeDspGraph = null;
+  activeDspAudio = null;
+  activeAnalyser = null;
+  try {
+    graph.cleanupListeners();
+  } catch {
+    // ignore listener cleanup errors
+  }
+  try {
+    graph.lfo?.stop();
+  } catch {
+    // ignore already-stopped oscillator
+  }
+  void graph.ctx.close().catch(() => {});
+};
+
 const syncAudioElementDsp = () => {
   const audio = document.querySelector('audio');
   if (!audio) {
+    disposeActiveDspGraph();
     return;
+  }
+  if (activeDspAudio && activeDspAudio !== audio) {
+    disposeActiveDspGraph();
   }
 
   const {
@@ -913,6 +985,7 @@ const syncAudioElementDsp = () => {
       audio.addEventListener('volumechange', syncVol);
 
       let panner: StereoPannerNode | null = null;
+      let lfo: OscillatorNode | null = null;
       let lfoGain: GainNode | null = null;
 
       let prevNode: AudioNode = source;
@@ -927,7 +1000,7 @@ const syncAudioElementDsp = () => {
 
       if (typeof ctx.createStereoPanner === 'function') {
         panner = ctx.createStereoPanner();
-        const lfo = ctx.createOscillator();
+        lfo = ctx.createOscillator();
         lfo.type = 'sine';
         lfo.frequency.value = 0.13;
         lfoGain = ctx.createGain();
@@ -975,12 +1048,17 @@ const syncAudioElementDsp = () => {
         loudnessGain,
         masterVolumeGain,
         panner,
+        lfo,
         lfoGain,
         normalGain,
         karaokeGain,
         analyser,
+        cleanupListeners: () =>
+          audio.removeEventListener('volumechange', syncVol),
       };
       dspGraphs.set(audio, graph);
+      activeDspAudio = audio;
+      activeDspGraph = graph;
       activeAnalyser = analyser;
     } catch {
       // Ignore if element already attached to another AudioContext

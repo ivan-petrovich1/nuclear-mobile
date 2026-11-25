@@ -4,6 +4,7 @@ import { StateCreator } from 'zustand';
 
 import type { QueueItem, StreamCandidate } from '@nuclearplayer/model';
 
+import { bypassOfflineForItem } from '../../../services/streamResolution/offlineBypass';
 import { withPersistence } from '../persistence';
 import type { QueueStore } from '../types';
 
@@ -73,6 +74,7 @@ export const createCandidatesSlice: StateCreator<
     if (!item) {
       return;
     }
+    bypassOfflineForItem(itemId);
     const { track } = item;
     const [selected, rest] = partition(
       track.streamCandidates ?? [],
@@ -81,8 +83,16 @@ export const createCandidatesSlice: StateCreator<
     const retried = selected.map((candidate) => ({
       ...candidate,
       failed: false,
+      stream: candidate.stream?.url?.includes('/local/')
+        ? undefined
+        : candidate.stream,
     }));
+    const shouldResetStatus =
+      item.status === 'loading' ||
+      item.status === 'error' ||
+      get().getCurrentItem()?.id === itemId;
     get().updateItemState(itemId, {
+      ...(shouldResetStatus ? { status: 'idle', error: undefined } : {}),
       track: { ...track, streamCandidates: [...retried, ...rest] },
     });
   },

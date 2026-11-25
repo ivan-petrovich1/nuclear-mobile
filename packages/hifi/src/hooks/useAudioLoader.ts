@@ -31,6 +31,12 @@ export const useAudioLoader = (
       prevUrl.current = src.url;
     }
   }, [src, audioRef]);
+
+  useEffect(() => {
+    return () => {
+      prevUrl.current = null;
+    };
+  }, []);
 };
 
 const createSourceElement = (url: string, mimeType: string) => {
