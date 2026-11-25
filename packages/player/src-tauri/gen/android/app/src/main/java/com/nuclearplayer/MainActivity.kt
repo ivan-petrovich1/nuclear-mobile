@@ -131,6 +131,31 @@ class NuclearAndroidBridge(
     }
   }
 
+  /** Opens the native Android Share Sheet for sharing a song or playlist link/text. */
+  @JavascriptInterface
+  fun shareText(title: String, text: String): String {
+    return try {
+      val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        if (title.isNotBlank()) {
+          putExtra(Intent.EXTRA_SUBJECT, title)
+          putExtra(Intent.EXTRA_TITLE, title)
+        }
+        putExtra(Intent.EXTRA_TEXT, text)
+      }
+      val chooser = Intent.createChooser(
+        shareIntent,
+        title.ifBlank { "Share from Nuclear" },
+      ).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      context.startActivity(chooser)
+      "OK"
+    } catch (e: Exception) {
+      "ERROR:${e.message ?: e.toString()}"
+    }
+  }
+
   @JavascriptInterface
   fun updateMediaSession(
     title: String,

@@ -1,0 +1,100 @@
+[
+  {
+    "date": "2026-11-25T06:58",
+    "description": "v1.0.7 — Live Floating Lyric Line on the Desktop Player Bar & Android Mini-Player (click to open full synced lyrics, 1-click toggle) + hidden search Easter Egg.",
+    "type": "feature",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.7", "color": "purple" },
+      { "label": "Lyrics", "color": "cyan" }
+    ]
+  },
+  {
+    "date": "2026-11-25T06:30",
+    "description": "v1.0.7 — Native cross-platform Share button added across Linux, Windows, macOS, and Android (Player Bar, Mini-Player, Expanded Now Playing, Song Context Menu, and Playlists; native Android Share Sheet & Desktop clipboard copy).",
+    "type": "feature",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.7", "color": "purple" },
+      { "label": "All Ports", "color": "green" }
+    ]
+  },
+  {
+    "date": "2026-11-25T06:15",
+    "description": "v1.0.7 — Fixed Shuffle: toggling Shuffle now visibly reorders the Queue Panel & restores original order when turned off, pressing Play on a playlist starts on a random track, and pre-resolving / drag-reorder stay synced with shuffle order.",
+    "type": "fix",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.7", "color": "purple" },
+      { "label": "Queue", "color": "green" }
+    ]
+  },
+  {
+    "date": "2026-11-25T06:45",
+    "description": "v1.0.7 — Hardened upstream sync safeguards: weekly sync schedule, protected fork-file policy, fast pre-commit integrity verifier, Android Rust cross-compile CI check, blast-radius Draft gate, and branch protection on main.",
+    "type": "improvement",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "Safeguards", "color": "orange" }
+    ]
+  },
+  {
+    "date": "2026-11-24T23:55",
+    "description": "v1.0.6 — Fixed Linux AppImage WebKitGTK/Skia SIGABRT crash on Bazzite, Fedora 43/44, and Arch by automatically filtering COLRv1 emoji fonts via Fontconfig when running as an AppImage.",
+    "type": "fix",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.6", "color": "purple" },
+      { "label": "Linux", "color": "yellow" }
+    ]
+  },
+  {
+    "date": "2026-11-24T23:00",
+    "description": "v1.0.6 — Brought full Android feature parity to Desktop: Nuclear Hub (Spotify Account Sync, Offline & Tools, Wrapped Stats, P2P Sync, Audio DSP), Immersive Now Playing Overlay (Vinyl Mode, Beat Visualizer, Synced Lyrics, Karaoke, A-B Loop, Drop Bookmarks), Multi-Source Stream Switcher, OLED Black Mode, and fixed Dashboard Similar Artists play button clipping.",
+    "type": "feature",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.6", "color": "purple" },
+      { "label": "Desktop", "color": "blue" }
+    ]
+  },
+  {
+    "date": "2026-11-24T08:15",
+    "description": "v1.0.5 — Added native macOS (Apple Silicon & Intel) DMG releases with built-in macOS self-updater and verified multi-platform Linux (.AppImage/.deb/.rpm) & Windows (.exe/.msi) builds.",
+    "type": "feature",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.5", "color": "purple" },
+      { "label": "macOS", "color": "cyan" }
+    ]
+  },
+  {
+    "date": "2026-11-24T03:30",
+    "description": "v1.0.3 — Replaced global Top 100 widgets with a 100% Personalized Dashboard feed (Mixes, Quick Picks, Similar Artists, Rediscover) and made offline auto-downloads toggleable (OFF by default).",
+    "type": "feature",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.3", "color": "purple" },
+      { "label": "Dashboard", "color": "green" }
+    ]
+  },
+  {
+    "date": "2026-11-22T05:45",
+    "description": "v1.0.1 — Launched Nuclear Mobile for Android with native Kotlin MediaSession & Home Widget, P2P Desktop↔Mobile Sync & Playback Handoff, Offline Library, Spotify Profile Sync, and native Rust InnerTube/Piped streaming.",
+    "type": "feature",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.1", "color": "purple" },
+      { "label": "Android", "color": "green" }
+    ]
+  }
+]

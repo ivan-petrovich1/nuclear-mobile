@@ -1,0 +1,84 @@
+name: Fork Safeguards Verify
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: fork-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DO_NOT_TRACK: 1
+
+jobs:
+  verify:
+    name: Fork Safeguards, Build & Tests
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Run fast fork integrity guard
+        run: node scripts/verify-fork-integrity.mjs
+
+      - name: Setup PNPM
+        uses: pnpm/action-setup@v6
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace packages and frontend
+        run: |
+          pnpm turbo build --filter='@nuclearplayer/player^...'
+          pnpm --filter @nuclearplayer/player build:frontend
+
+      - name: Run fork safeguards and full player test suite
+        run: pnpm --filter @nuclearplayer/player test
+
+      - name: Install Linux Rust build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libdbus-1-dev \
+            libssl-dev
+
+      - name: Setup Rust (Desktop + Android target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/player/src-tauri -> target
+
+      - name: Check Linux Rust binary & run Rust unit tests
+        run: |
+          cargo check --manifest-path packages/player/src-tauri/Cargo.toml --bins
+          cargo test --manifest-path packages/player/src-tauri/Cargo.toml --lib
+
+      - name: Verify Android Rust library compiles (aarch64-linux-android)
+        shell: bash
+        run: |
+          set -euo pipefail
+          NDK_DIR="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-}}"
+          if [ -n "$NDK_DIR" ] && [ -d "$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin" ]; then
+            TOOLCHAIN="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            export PATH="$TOOLCHAIN:$PATH"
+            export CC_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android24-clang"
+            export CXX_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android24-clang++"
+            export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+            export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android24-clang"
+          fi
+          cargo check --manifest-path packages/player/src-tauri/Cargo.toml --target aarch64-linux-android --lib

@@ -63,6 +63,7 @@ export const createEditingSlice: StateCreator<
     | 'removeByIds'
     | 'removeByIndices'
     | 'clearQueue'
+    | 'shuffleQueue'
     | 'reorder'
     | 'moveBefore'
   >
@@ -148,6 +149,41 @@ export const createEditingSlice: StateCreator<
     Logger.queue.info(`Cleared queue (${itemCount} items removed)`);
   }),
 
+  shuffleQueue: withPersistence(get, (shuffleAll = false) => {
+    const { items, currentIndex } = get();
+    if (items.length <= 1) {
+      return;
+    }
+
+    if (playbackSettings.shuffleEnabled) {
+      const baseOrder = PlayOrder.fromQueue(items, currentIndex);
+      const nextOrder = shuffleAll
+        ? baseOrder.shuffleAll()
+        : baseOrder.shuffle();
+      const nextIndex = items.findIndex(
+        (item) => item.id === nextOrder.currentItemId,
+      );
+      set({
+        currentIndex: nextIndex === -1 ? 0 : nextIndex,
+        playOrder: nextOrder.itemIds,
+        playCursor: nextOrder.cursor,
+        playNextTailId: nextOrder.playNextTailId,
+      });
+      return;
+    }
+
+    const copy = [...items];
+    const head = shuffleAll ? [] : copy.splice(currentIndex, 1);
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    set({
+      items: [...head, ...copy],
+      currentIndex: 0,
+    });
+  }),
+
   reorder: withPersistence(get, (fromIndex: number, toIndex: number) => {
     set(
       produce((state: QueueStore) => {
@@ -178,9 +214,24 @@ export const createEditingSlice: StateCreator<
       if (!movedItem || itemId === beforeItemId) {
         return;
       }
-      const currentItemId = get().getCurrentItem()?.id;
+      const state = get();
+      if (playbackSettings.shuffleEnabled && state.playOrder.length > 0) {
+        const nextOrder = new PlayOrder(
+          state.playOrder,
+          state.playCursor,
+          state.playNextTailId,
+        ).moveBefore(itemId, beforeItemId);
+        set({
+          playOrder: nextOrder.itemIds,
+          playCursor: nextOrder.cursor,
+          playNextTailId: nextOrder.playNextTailId,
+        });
+        return;
+      }
 
-      const otherItems = get().items.filter((item) => item.id !== itemId);
+      const currentItemId = state.getCurrentItem()?.id;
+
+      const otherItems = state.items.filter((item) => item.id !== itemId);
       const itemsBefore = takeWhile(
         otherItems,
         (item) => item.id !== beforeItemId,

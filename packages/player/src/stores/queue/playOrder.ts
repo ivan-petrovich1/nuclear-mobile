@@ -40,6 +40,33 @@ export class PlayOrder {
     return new PlayOrder([currentItemId, ...shuffle(otherItemIds)], 0, null);
   }
 
+  shuffleAll() {
+    if (this.itemIds.length <= 1) {
+      return this;
+    }
+    return new PlayOrder(shuffle(this.itemIds), 0, null);
+  }
+
+  moveBefore(itemId: string, beforeItemId: string | null) {
+    if (!this.itemIds.includes(itemId) || itemId === beforeItemId) {
+      return this;
+    }
+    const currentItemId = this.currentItemId;
+    const otherIds = this.itemIds.filter((id) => id !== itemId);
+    const insertIndex =
+      beforeItemId === null ? otherIds.length : otherIds.indexOf(beforeItemId);
+    const targetIndex = insertIndex === -1 ? otherIds.length : insertIndex;
+    const nextItemIds = [
+      ...otherIds.slice(0, targetIndex),
+      itemId,
+      ...otherIds.slice(targetIndex),
+    ];
+    const nextCursor = currentItemId
+      ? Math.max(0, nextItemIds.indexOf(currentItemId))
+      : this.cursor;
+    return new PlayOrder(nextItemIds, nextCursor, this.playNextTailId);
+  }
+
   shuffleIn(newItemIds: string[]) {
     const allItemIds = [...this.itemIds, ...newItemIds];
     const firstShuffledSlot = Math.max(this.cursor, this.playNextTailSlot) + 1;
@@ -142,3 +169,28 @@ export class PlayOrder {
     return this;
   }
 }
+
+export const orderQueueItems = (
+  items: QueueItem[],
+  playOrder: string[],
+): QueueItem[] => {
+  if (playOrder.length === 0) {
+    return items;
+  }
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const ordered: QueueItem[] = [];
+  const seen = new Set<string>();
+  for (const id of playOrder) {
+    const item = byId.get(id);
+    if (item && !seen.has(id)) {
+      ordered.push(item);
+      seen.add(id);
+    }
+  }
+  for (const item of items) {
+    if (!seen.has(item.id)) {
+      ordered.push(item);
+    }
+  }
+  return ordered;
+};

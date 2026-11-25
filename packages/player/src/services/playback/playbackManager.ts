@@ -38,9 +38,12 @@ export class PlaybackManager {
   };
 
   playTracks = (tracks: Track[]): void => {
-    const { clearQueue, addToQueue } = useQueueStore.getState();
+    const { clearQueue, addToQueue, shuffleQueue } = useQueueStore.getState();
     clearQueue();
     addToQueue(tracks);
+    if (playbackSettings.shuffleEnabled && tracks.length > 1) {
+      shuffleQueue(true);
+    }
     this.play();
   };
 

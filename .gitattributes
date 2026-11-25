@@ -7,3 +7,14 @@
 *.webp binary
 *.svg text
 packages/player/src-tauri/fixtures/ytdlp_verify/real/** binary
+
+# Fork-owned files: prefer fork version on merge conflicts (defense-in-depth with fork-protected-files.txt)
+packages/player/src-tauri/tauri.conf.json merge=ours
+packages/player/src-tauri/src/ytdlp.rs merge=ours
+packages/player/fork-changelog.json merge=ours
+README.md merge=ours
+scripts/verify-fork-integrity.mjs merge=ours
+.github/fork-protected-files.txt merge=ours
+.github/workflows/multiplatform-release.yml merge=ours
+.github/workflows/upstream-sync.yml merge=ours
+.github/workflows/fork-verify.yml merge=ours

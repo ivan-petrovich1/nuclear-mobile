@@ -5,6 +5,7 @@ import { persist } from 'zustand/middleware';
 import { pickArtwork, type Track } from '@nuclearplayer/model';
 
 import { useDownloadStore } from '../stores/downloadStore';
+import { orderQueueItems } from '../stores/queue/playOrder';
 import { useQueueStore } from '../stores/queue/queueStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSoundStore } from '../stores/soundStore';
@@ -13,6 +14,7 @@ import { triggerEndlessRadio } from './endlessRadio';
 import { httpHost } from './httpHost';
 import { initP2pSync } from './p2pSync';
 import { playbackManager } from './playback';
+import { playbackSettings } from './playbackSettings';
 import { syncAmbientSoundSpace, type AmbientSpace } from './soundSpaces';
 import { useSpotifyAccountSyncStore } from './spotifyAccountSync';
 import { hasFreshStream, streamingHost } from './streamingHost';
@@ -22,6 +24,31 @@ import { useWrappedStatsStore } from './wrappedStats';
 export type LrcLine = {
   timeSec: number;
   text: string;
+};
+
+export const getActiveLyricLine = (
+  syncedLyrics: LrcLine[],
+  positionSec: number,
+): { current: LrcLine | null; next: LrcLine | null; index: number } => {
+  if (!syncedLyrics.length) {
+    return { current: null, next: null, index: -1 };
+  }
+  const target = positionSec + 0.25;
+  let index = -1;
+  for (let i = syncedLyrics.length - 1; i >= 0; i--) {
+    if (syncedLyrics[i].timeSec <= target) {
+      index = i;
+      break;
+    }
+  }
+  if (index === -1) {
+    return { current: null, next: syncedLyrics[0] ?? null, index: -1 };
+  }
+  return {
+    current: syncedLyrics[index] ?? null,
+    next: syncedLyrics[index + 1] ?? null,
+    index,
+  };
 };
 
 export type NowPlayingTab = 'player' | 'lyrics' | 'dsp' | 'queue';
@@ -43,20 +70,11 @@ export const EQ_PRESETS: Record<
 };
 
 export const shuffleRemainingQueue = (): void => {
-  const { items, currentIndex } = useQueueStore.getState();
+  const { items, shuffleQueue } = useQueueStore.getState();
   if (items.length <= 1) {
     return;
   }
-  const copy = [...items];
-  const current =
-    currentIndex >= 0 && currentIndex < copy.length
-      ? copy.splice(currentIndex, 1)
-      : [];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  useQueueStore.setState({ items: [...current, ...copy], currentIndex: 0 });
+  shuffleQueue(false);
   toast.info('🔀 Shuffled upcoming queue');
 };
 
@@ -91,6 +109,7 @@ type MobileEnhancementsState = {
   loopB: number | null;
   trackBookmarks: Record<string, number>;
   visualizerEnabled: boolean;
+  floatingLyricsEnabled: boolean;
   karaokeEnabled: boolean;
   crossfadeSeconds: number;
   silenceTrimEnabled: boolean;
@@ -124,6 +143,8 @@ type MobileEnhancementsState = {
   clearLoop: () => void;
   setTrackBookmark: (trackKey: string, sec: number | null) => void;
   setVisualizerEnabled: (enabled: boolean) => void;
+  setFloatingLyricsEnabled: (enabled: boolean) => void;
+  toggleFloatingLyrics: () => void;
   setKaraokeEnabled: (enabled: boolean) => void;
   setCrossfadeSeconds: (sec: number) => void;
   setSilenceTrimEnabled: (enabled: boolean) => void;
@@ -163,6 +184,7 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
       loopB: null,
       trackBookmarks: {},
       visualizerEnabled: true,
+      floatingLyricsEnabled: true,
       karaokeEnabled: false,
       crossfadeSeconds: 0,
       silenceTrimEnabled: false,
@@ -261,6 +283,12 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
           return { trackBookmarks: next };
         }),
       setVisualizerEnabled: (visualizerEnabled) => set({ visualizerEnabled }),
+      setFloatingLyricsEnabled: (floatingLyricsEnabled) =>
+        set({ floatingLyricsEnabled }),
+      toggleFloatingLyrics: () =>
+        set((state) => ({
+          floatingLyricsEnabled: !state.floatingLyricsEnabled,
+        })),
       setKaraokeEnabled: (karaokeEnabled) => set({ karaokeEnabled }),
       setCrossfadeSeconds: (crossfadeSeconds) => set({ crossfadeSeconds }),
       setSilenceTrimEnabled: (silenceTrimEnabled) =>
@@ -293,6 +321,7 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
         shakeSensitivity: state.shakeSensitivity,
         trackBookmarks: state.trackBookmarks,
         visualizerEnabled: state.visualizerEnabled,
+        floatingLyricsEnabled: state.floatingLyricsEnabled,
         crossfadeSeconds: state.crossfadeSeconds,
         silenceTrimEnabled: state.silenceTrimEnabled,
         endlessRadioEnabled: state.endlessRadioEnabled,
@@ -484,11 +513,21 @@ const preResolveUpcomingTracks = async () => {
   }
   preResolveInFlight = true;
   try {
-    const { items, currentIndex, updateItemState, updateCandidate } =
-      useQueueStore.getState();
-    const upcoming = [items[currentIndex + 1], items[currentIndex + 2]].filter(
-      Boolean,
-    );
+    const {
+      items,
+      currentIndex,
+      playOrder,
+      playCursor,
+      updateItemState,
+      updateCandidate,
+    } = useQueueStore.getState();
+    const isShuffled = playbackSettings.shuffleEnabled && playOrder.length > 0;
+    const orderedItems = isShuffled ? orderQueueItems(items, playOrder) : items;
+    const activeIndex = isShuffled ? playCursor : currentIndex;
+    const upcoming = [
+      orderedItems[activeIndex + 1],
+      orderedItems[activeIndex + 2],
+    ].filter(Boolean);
 
     for (const nextItem of upcoming) {
       if (

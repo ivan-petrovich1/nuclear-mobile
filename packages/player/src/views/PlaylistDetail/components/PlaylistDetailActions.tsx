@@ -14,11 +14,13 @@ import { PlaylistActions } from '../../Playlists/components/PlaylistActions';
 
 type PlaylistDetailActionsProps = {
   playlistId: string;
+  playlistName?: string;
   tracks: Track[];
 };
 
 export const PlaylistDetailActions: FC<PlaylistDetailActionsProps> = ({
   playlistId,
+  playlistName,
   tracks,
 }) => {
   const { t } = useTranslation('playlists');
@@ -40,6 +42,7 @@ export const PlaylistDetailActions: FC<PlaylistDetailActionsProps> = ({
     <>
       <PlaylistActions
         tracks={tracks}
+        shareTitle={playlistName}
         menuItems={
           <>
             <Popover.Item

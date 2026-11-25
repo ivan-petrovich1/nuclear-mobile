@@ -1843,6 +1843,39 @@ exports[`Sources view > (Snapshot) renders the view 1`] = `
             class="flex items-center gap-1.5"
           >
             <button
+              aria-label="Toggle live floating lyrics"
+              class="hover:bg-muted flex size-8 items-center justify-center rounded-md transition text-primary opacity-100"
+              data-testid="player-bar-live-lyrics-toggle"
+              title="Hide Live Floating Lyrics"
+              type="button"
+            >
+              <svg
+                aria-hidden="true"
+                class="lucide lucide-mic-vocal"
+                fill="none"
+                height="15"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+                width="15"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="m11 7.601-5.994 8.19a1 1 0 0 0 .1 1.298l.817.818a1 1 0 0 0 1.314.087L15.09 12"
+                />
+                <path
+                  d="M16.5 21.174C15.5 20.5 14.372 20 13 20c-2.058 0-3.928 2.356-6 2-2.072-.356-2.775-3.369-1.5-4.5"
+                />
+                <circle
+                  cx="16"
+                  cy="7"
+                  r="5"
+                />
+              </svg>
+            </button>
+            <button
               aria-label="Sleep Timer"
               class="hover:bg-muted flex h-8 items-center gap-1 rounded-md px-1.5 text-xs font-bold transition opacity-80 hover:opacity-100"
               title="Sleep Timer"

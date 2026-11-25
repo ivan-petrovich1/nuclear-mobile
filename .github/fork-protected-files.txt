@@ -1,0 +1,49 @@
+# Protected fork files for upstream-sync (nukeop/nuclear).
+# Format: <policy> <path-prefix-or-file>
+#
+# Policies:
+#   keep-ours       Upstream changes to these files must NEVER be merged automatically;
+#                   any upstream diff immediately blocks the sync and requires manual review.
+#   review-required Upstream changes that merge cleanly force the PR into DRAFT mode
+#                   with a prominent warning listing the modified fork files.
+
+# --- Strictly fork-owned files (never accept upstream edits silently) ---
+keep-ours packages/player/src-tauri/tauri.conf.json
+keep-ours packages/player/src-tauri/src/ytdlp.rs
+keep-ours packages/player/src/stores/updaterStore.ts
+keep-ours packages/player/fork-changelog.json
+keep-ours README.md
+keep-ours scripts/verify-fork-integrity.mjs
+keep-ours .husky/pre-commit
+keep-ours .gitattributes
+keep-ours .github/fork-protected-files.txt
+keep-ours .github/workflows/multiplatform-release.yml
+keep-ours .github/workflows/upstream-sync.yml
+keep-ours .github/workflows/fork-verify.yml
+
+# --- Critical shared files containing fork features / platform fixes ---
+review-required packages/player/src-tauri/src/main.rs
+review-required packages/player/src-tauri/src/lib.rs
+review-required packages/player/src-tauri/src/commands.rs
+review-required packages/player/src-tauri/Cargo.toml
+review-required packages/player/src-tauri/gen/android/app/src/main/java/com/nuclearplayer/MainActivity.kt
+review-required packages/player/src/initPlayerApp.tsx
+review-required packages/player/src/routes/__root.tsx
+review-required packages/player/src/views/Dashboard/Dashboard.tsx
+review-required packages/player/src/views/Dashboard/components/PersonalizedDashboard.tsx
+review-required packages/player/src/views/Playlists/components/PlaylistActions.tsx
+review-required packages/player/src/components/useSettingsNavigation.tsx
+review-required packages/player/src/hooks/useQueue.ts
+review-required packages/player/src/stores/queue/playOrder.ts
+review-required packages/player/src/stores/queue/actions/editing.ts
+review-required packages/player/src/stores/queue/persistence.ts
+review-required packages/player/src/services/playback/playbackManager.ts
+review-required packages/player/src/services/coreSettings.ts
+review-required packages/player/src/services/personalizedFeed.ts
+review-required packages/player/src/services/shareService.ts
+review-required packages/player/src/services/searchEasterEggs.ts
+review-required packages/player/src/components/SearchBox/useSearchBox.ts
+review-required packages/player/src/services/streamResolution/streamResolution.ts
+review-required packages/player/src/components/ConnectedTrackTable.tsx
+review-required packages/player/src/components/ConnectedTrackContextMenu.tsx
+review-required packages/player/src/components/ConnectedPlayerBar/

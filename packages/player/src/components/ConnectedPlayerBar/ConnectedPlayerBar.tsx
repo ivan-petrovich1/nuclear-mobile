@@ -4,8 +4,10 @@ import {
   Download,
   Loader2,
   Maximize2,
+  MicVocal,
   Moon,
   Send,
+  Share2,
   Sliders,
 } from 'lucide-react';
 import { FC, useEffect, useState } from 'react';
@@ -15,10 +17,12 @@ import { PlayerBar } from '@nuclearplayer/ui';
 import { useCurrentQueueItem } from '../../hooks/useCurrentQueueItem';
 import { useMobileEnhancementsStore } from '../../services/mobileEnhancements';
 import { useP2pSyncStore } from '../../services/p2pSync';
+import { shareTrack } from '../../services/shareService';
 import {
   getTrackDownloadKey,
   useDownloadStore,
 } from '../../stores/downloadStore';
+import { LiveLyricTicker } from '../LiveLyricTicker';
 import { ConnectedControls } from './ConnectedControls';
 import { ConnectedNowPlaying } from './ConnectedNowPlaying';
 import { ConnectedSeekBar } from './ConnectedSeekBar';
@@ -37,6 +41,12 @@ export const ConnectedPlayerBar: FC = () => {
 
   const sleepEndAt = useMobileEnhancementsStore((s) => s.sleepEndAt);
   const cycleSleepTimer = useMobileEnhancementsStore((s) => s.cycleSleepTimer);
+  const floatingLyricsEnabled = useMobileEnhancementsStore(
+    (s) => s.floatingLyricsEnabled,
+  );
+  const toggleFloatingLyrics = useMobileEnhancementsStore(
+    (s) => s.toggleFloatingLyrics,
+  );
   const openDesktopHub = useMobileEnhancementsStore((s) => s.openDesktopHub);
   const setDesktopStreamPickerOpen = useMobileEnhancementsStore(
     (s) => s.setDesktopStreamPickerOpen,
@@ -75,6 +85,7 @@ export const ConnectedPlayerBar: FC = () => {
 
   return (
     <>
+      <LiveLyricTicker variant="desktop" />
       <ConnectedSeekBar />
       <PlayerBar
         left={<ConnectedNowPlaying />}
@@ -114,6 +125,18 @@ export const ConnectedPlayerBar: FC = () => {
             {track && (
               <button
                 type="button"
+                onClick={() => void shareTrack(track)}
+                title="Share Song"
+                aria-label="Share current track"
+                data-testid="player-bar-share-button"
+                className="hover:bg-muted flex size-8 items-center justify-center rounded-md opacity-80 transition hover:opacity-100"
+              >
+                <Share2 size={15} />
+              </button>
+            )}
+            {track && (
+              <button
+                type="button"
                 onClick={() => setDesktopStreamPickerOpen(true)}
                 title="Switch Audio Stream"
                 aria-label="Switch Audio Stream"
@@ -122,6 +145,24 @@ export const ConnectedPlayerBar: FC = () => {
                 <ArrowLeftRight size={15} />
               </button>
             )}
+            <button
+              type="button"
+              onClick={toggleFloatingLyrics}
+              title={
+                floatingLyricsEnabled
+                  ? 'Hide Live Floating Lyrics'
+                  : 'Show Live Floating Lyrics'
+              }
+              aria-label="Toggle live floating lyrics"
+              data-testid="player-bar-live-lyrics-toggle"
+              className={`hover:bg-muted flex size-8 items-center justify-center rounded-md transition ${
+                floatingLyricsEnabled
+                  ? 'text-primary opacity-100'
+                  : 'opacity-80 hover:opacity-100'
+              }`}
+            >
+              <MicVocal size={15} />
+            </button>
             <button
               type="button"
               onClick={cycleSleepTimer}

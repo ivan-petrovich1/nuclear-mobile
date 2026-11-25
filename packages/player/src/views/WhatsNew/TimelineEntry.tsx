@@ -4,7 +4,11 @@ import { FC } from 'react';
 import { useTranslation } from '@nuclearplayer/i18n';
 import { Badge, cn } from '@nuclearplayer/ui';
 
-import type { ChangelogEntry, ChangelogEntryType } from '../../types/changelog';
+import type {
+  ChangelogAuthor,
+  ChangelogEntry,
+  ChangelogEntryType,
+} from '../../types/changelog';
 import { TimelineNode } from './TimelineNode';
 
 const TYPE_COLORS: Record<ChangelogEntryType, string> = {
@@ -14,6 +18,23 @@ const TYPE_COLORS: Record<ChangelogEntryType, string> = {
   chore: 'orange',
   plugin: 'cyan',
   docs: 'blue',
+};
+
+export const resolveChangelogAuthor = (
+  entry: ChangelogEntry,
+): ChangelogAuthor => {
+  if (entry.author === 'ivan' || entry.author === 'nukeop') {
+    return entry.author;
+  }
+  if (
+    entry.contributors?.some(
+      (c) =>
+        c.toLowerCase() === 'ivan' || c.toLowerCase() === 'ivan-petrovich1',
+    )
+  ) {
+    return 'ivan';
+  }
+  return 'nukeop';
 };
 
 type TimelineEntryProps = {
@@ -28,6 +49,7 @@ export const TimelineEntry: FC<TimelineEntryProps> = ({
   isLast,
 }) => {
   const { t } = useTranslation('changelog');
+  const author = resolveChangelogAuthor(entry);
 
   return (
     <div data-testid="changelog-entry" className="flex gap-4">
@@ -47,14 +69,23 @@ export const TimelineEntry: FC<TimelineEntryProps> = ({
         />
       </div>
       <div className="my-4 flex flex-1 flex-col gap-1">
-        <div className="flex items-center justify-between px-1">
-          <Badge
-            data-testid="changelog-type-badge"
-            variant="pill"
-            color={TYPE_COLORS[entry.type] as never}
-          >
-            {t(`types.${entry.type}`)}
-          </Badge>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+          <div className="flex items-center gap-1.5">
+            <Badge
+              data-testid="changelog-type-badge"
+              variant="pill"
+              color={TYPE_COLORS[entry.type] as never}
+            >
+              {t(`types.${entry.type}`)}
+            </Badge>
+            <Badge
+              data-testid="changelog-author-badge"
+              variant="pill"
+              color={(author === 'ivan' ? 'purple' : 'blue') as never}
+            >
+              {author === 'ivan' ? 'by ivan' : 'by nukeop'}
+            </Badge>
+          </div>
           {entry.tags && entry.tags.length > 0 && (
             <div className="flex gap-1.5">
               {entry.tags.map((tag) => (

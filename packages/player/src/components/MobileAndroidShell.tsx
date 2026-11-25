@@ -38,6 +38,7 @@ import { pickArtwork, type RepeatMode, type Track } from '@nuclearplayer/model';
 
 import { useCoreSetting } from '../hooks/useCoreSetting';
 import { useCurrentQueueItem } from '../hooks/useCurrentQueueItem';
+import { useQueue } from '../hooks/useQueue';
 import { useTrackActions } from '../hooks/useTrackActions';
 import { haptic } from '../services/androidMediaBridge';
 import { spinForgottenGem } from '../services/endlessRadio';
@@ -47,6 +48,7 @@ import {
 } from '../services/mobileEnhancements';
 import { useP2pSyncStore } from '../services/p2pSync';
 import { playbackManager } from '../services/playback';
+import { shareTrack } from '../services/shareService';
 import { resolveAllProviderCandidates } from '../services/streamingHost';
 import {
   shareTrackVibeCard,
@@ -65,6 +67,7 @@ import { useUpdaterStore } from '../stores/updaterStore';
 import { AudioDspPanel } from './AudioDspPanel';
 import { BeatVisualizer } from './BeatVisualizer';
 import { FakeBankModal } from './FakeBankModal';
+import { LiveLyricTicker } from './LiveLyricTicker';
 import { P2pSyncPanel } from './P2pSyncPanel';
 import { SpotifyAccountSyncPanel } from './SpotifyAccountSyncPanel';
 
@@ -99,11 +102,10 @@ export const MobileAndroidShell: FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentItem = useCurrentQueueItem();
-  const queueItems = useQueueStore((s) => s.items);
-  const currentIndex = useQueueStore((s) => s.currentIndex);
+  const { items: queueItems, currentIndex } = useQueue();
   const goToNext = useQueueStore((s) => s.goToNext);
   const goToPrevious = useQueueStore((s) => s.goToPrevious);
-  const goToIndex = useQueueStore((s) => s.goToIndex);
+  const goToId = useQueueStore((s) => s.goToId);
   const clearQueue = useQueueStore((s) => s.clearQueue);
 
   const { status, seek: position, duration } = useSoundStore();
@@ -145,11 +147,13 @@ export const MobileAndroidShell: FC = () => {
     loopB,
     trackBookmarks,
     visualizerEnabled,
+    floatingLyricsEnabled,
     karaokeEnabled,
     setNowPlayingOpen,
     setNowPlayingTab,
     cycleSleepTimer,
     setOledBlackMode,
+    setFloatingLyricsEnabled,
     setSponsorBlockEnabled,
     setPreResolveEnabled,
     setLoopA,
@@ -475,6 +479,7 @@ export const MobileAndroidShell: FC = () => {
             </div>
           </div>
         )}
+        <LiveLyricTicker variant="mobile" />
         {track && (
           <div
             className="relative flex cursor-pointer items-center gap-2.5 px-3 py-2 select-none"
@@ -557,6 +562,18 @@ export const MobileAndroidShell: FC = () => {
                 )}
               </div>
             </div>
+
+            <button
+              className="flex size-8 items-center justify-center rounded-full transition-transform active:scale-90"
+              onClick={(e) => {
+                e.stopPropagation();
+                haptic('light');
+                void shareTrack(track);
+              }}
+              aria-label="Share song"
+            >
+              <Share2 size={15} />
+            </button>
 
             <button
               className="flex size-9 items-center justify-center rounded-full"
@@ -1006,6 +1023,14 @@ export const MobileAndroidShell: FC = () => {
                   />
                 </label>
                 <label className="flex items-center justify-between text-xs font-semibold">
+                  <span>🎤 Live Floating Lyric Bar (above Mini-Player)</span>
+                  <input
+                    type="checkbox"
+                    checked={floatingLyricsEnabled}
+                    onChange={(e) => setFloatingLyricsEnabled(e.target.checked)}
+                  />
+                </label>
+                <label className="flex items-center justify-between text-xs font-semibold">
                   <span>🌑 True OLED Black Mode (#000000 AMOLED)</span>
                   <input
                     type="checkbox"
@@ -1364,6 +1389,17 @@ export const MobileAndroidShell: FC = () => {
                         className="flex size-9 items-center justify-center rounded-full bg-black/25 transition-transform active:scale-90"
                         onClick={() => {
                           haptic('medium');
+                          void shareTrack(track);
+                        }}
+                        aria-label="Share Song"
+                        title="Share Song"
+                      >
+                        <Share2 size={17} />
+                      </button>
+                      <button
+                        className="flex size-9 items-center justify-center rounded-full bg-black/25 transition-transform active:scale-90"
+                        onClick={() => {
+                          haptic('medium');
                           void shareTrackVibeCard({
                             title: track.title,
                             artist: artistName,
@@ -1378,7 +1414,7 @@ export const MobileAndroidShell: FC = () => {
                         aria-label="Share Vibe Card"
                         title="Share Vibe Card"
                       >
-                        <Share2 size={17} />
+                        <Sparkles size={16} />
                       </button>
                       <button
                         className="flex size-9 items-center justify-center rounded-full bg-black/25 transition-transform active:scale-90"
@@ -1784,7 +1820,7 @@ export const MobileAndroidShell: FC = () => {
                     <div
                       key={item.id}
                       onClick={() => {
-                        goToIndex(idx);
+                        goToId(item.id);
                         playbackManager.play();
                       }}
                       className={`flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 ${

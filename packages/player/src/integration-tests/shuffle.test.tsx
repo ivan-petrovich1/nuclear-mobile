@@ -1,5 +1,6 @@
 import shuffle from 'lodash-es/shuffle';
 
+import { playbackManager } from '../services/playback';
 import { providersHost } from '../services/providersHost';
 import { useQueueStore } from '../stores/queue/queueStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -400,5 +401,47 @@ describe('Shuffle', () => {
     expect(PlayerBarWrapper.nowPlayingTitle).toBe('B');
     await PlayerBarWrapper.nextButton.click();
     expect(PlayerBarWrapper.nowPlayingTitle).toBe('C');
+  });
+
+  it('visibly reorders the queue panel when shuffle is toggled on and restores original order when toggled off', async () => {
+    shuffleWillReturn('C', 'E', 'B', 'D');
+    await PlayerBarWrapper.shuffleButton.click();
+
+    expect(QueueWrapper.getItems().map((item) => item.title)).toEqual([
+      'A',
+      'C',
+      'E',
+      'B',
+      'D',
+    ]);
+
+    await PlayerBarWrapper.shuffleButton.click();
+
+    expect(QueueWrapper.getItems().map((item) => item.title)).toEqual([
+      'A',
+      'B',
+      'C',
+      'D',
+      'E',
+    ]);
+  });
+
+  it('starts on a shuffled track when playTracks is called with shuffle enabled', async () => {
+    shuffleWillReturn('C', 'E', 'B', 'D');
+    await PlayerBarWrapper.shuffleButton.click();
+
+    mockUuid.willReturn('T1', 'T2', 'T3');
+    shuffleWillReturn('T3', 'T2');
+    shuffleWillReturn('T2', 'T3', 'T1');
+    playbackManager.playTracks([
+      createQueueItem('Track 1').track,
+      createQueueItem('Track 2').track,
+      createQueueItem('Track 3').track,
+    ]);
+
+    expect(useQueueStore.getState().getCurrentItem()?.track.title).toBe(
+      'Track 2',
+    );
+    expect(useQueueStore.getState().playOrder).toEqual(['T2', 'T3', 'T1']);
   });
 });

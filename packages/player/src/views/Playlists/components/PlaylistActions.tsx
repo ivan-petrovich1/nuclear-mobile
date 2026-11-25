@@ -5,6 +5,7 @@ import {
   Loader2Icon,
   PlayIcon,
   PlusIcon,
+  Share2Icon,
 } from 'lucide-react';
 import type { FC, ReactNode } from 'react';
 
@@ -14,6 +15,7 @@ import { Button, cn, Popover } from '@nuclearplayer/ui';
 
 import { useQueueActions } from '../../../hooks/useQueueActions';
 import { playbackManager } from '../../../services/playback';
+import { sharePlaylist } from '../../../services/shareService';
 import {
   getTrackDownloadKey,
   useDownloadStore,
@@ -21,12 +23,14 @@ import {
 
 type PlaylistActionsProps = {
   tracks: Track[];
+  shareTitle?: string;
   menuItems?: ReactNode;
   className?: string;
 };
 
 export const PlaylistActions: FC<PlaylistActionsProps> = ({
   tracks,
+  shareTitle,
   menuItems,
   className,
 }) => {
@@ -77,6 +81,18 @@ export const PlaylistActions: FC<PlaylistActionsProps> = ({
             : allDownloaded
               ? 'Downloaded'
               : 'Download'}
+        </Button>
+      )}
+      {tracks.length > 0 && (
+        <Button
+          variant="tertiary"
+          onClick={() => {
+            void sharePlaylist(shareTitle ?? 'Nuclear Playlist', tracks);
+          }}
+          data-testid="share-playlist-button"
+        >
+          <Share2Icon size={16} />
+          Share
         </Button>
       )}
       <Popover

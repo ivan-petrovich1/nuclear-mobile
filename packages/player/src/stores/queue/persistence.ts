@@ -21,14 +21,20 @@ const loadPlayOrder = async (
   }
 
   const playOrder = (await store.get<string[]>('queue.playOrder')) ?? [];
-  if (playOrder.length === 0) {
+  const itemIdSet = new Set(state.items.map((item) => item.id));
+  const isValidPlayOrder =
+    playOrder.length === state.items.length &&
+    playOrder.every((id) => itemIdSet.has(id));
+  if (!isValidPlayOrder) {
     const shuffled = PlayOrder.fromQueue(
       state.items,
       state.currentIndex,
     ).shuffle();
     return { playOrder: shuffled.itemIds, playCursor: shuffled.cursor };
   }
-  const playCursor = await store.get<number>('queue.playCursor');
+  const rawCursor = (await store.get<number>('queue.playCursor')) ?? 0;
+  const playCursor =
+    rawCursor >= 0 && rawCursor < playOrder.length ? rawCursor : 0;
   return { playOrder, playCursor };
 };
 

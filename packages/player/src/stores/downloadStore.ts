@@ -6,8 +6,8 @@ import { create } from 'zustand';
 
 import type { StreamCandidate, Track } from '@nuclearplayer/model';
 
-import { candidatesForTrack } from '../services/streamResolution/candidateSource';
 import { hasFreshStream, streamingHost } from '../services/streamingHost';
+import { candidatesForTrack } from '../services/streamResolution/candidateSource';
 import { downloadFile } from '../services/tauri/commands';
 import { getSetting } from './settingsStore';
 
@@ -41,6 +41,7 @@ declare global {
         fileName: string,
         caption: string,
       ) => string;
+      shareText?: (title: string, text: string) => string;
       isIgnoringBatteryOptimizations?: () => boolean;
       requestIgnoreBatteryOptimizations?: () => void;
       openExternalUrl?: (url: string) => void;
@@ -346,10 +347,9 @@ export const useDownloadStore = create<DownloadStoreState>((set, get) => ({
           succeeded += 1;
         }
         set({ batchProgress: { completed, total } });
-        toast.loading(
-          `Downloading (${completed}/${total}): ${next.title}`,
-          { id: toastId },
-        );
+        toast.loading(`Downloading (${completed}/${total}): ${next.title}`, {
+          id: toastId,
+        });
       }
     };
 

@@ -1,8 +1,9 @@
 name: Upstream Sync (nukeop/nuclear)
 
 on:
+  # Weekly on Mondays at 06:00 UTC (never daily), plus manual on-demand trigger.
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '0 6 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -14,9 +15,12 @@ concurrency:
   group: upstream-sync
   cancel-in-progress: false
 
+env:
+  DO_NOT_TRACK: 1
+
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
@@ -25,12 +29,14 @@ jobs:
           fetch-depth: 0
           ref: main
 
-      - name: Fetch upstream and attempt non-destructive merge
+      - name: Fetch upstream and attempt safeguarded merge
         id: merge
         shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config merge.ours.driver true
 
           if git remote get-url upstream >/dev/null 2>&1; then
             git remote set-url upstream https://github.com/nukeop/nuclear.git
@@ -73,6 +79,7 @@ jobs:
           git checkout -B upstream-sync main
           git merge --no-commit --no-ff upstream/master || true
 
+          # Remove omitted upstream-only packages and junk auto-close workflows
           INITIAL_CONFLICTS=$(git diff --name-only --diff-filter=U)
           while IFS= read -r f; do
             [ -z "$f" ] && continue
@@ -81,12 +88,59 @@ jobs:
             fi
           done <<< "$INITIAL_CONFLICTS"
 
+          for banned in \
+            ".github/workflows/close-external-prs.yml" \
+            ".github/workflows/close-external-issues.yml"; do
+            if [ -e "$banned" ]; then
+              git rm -f --ignore-unmatch -- "$banned" >/dev/null
+            fi
+          done
+
+          # Check fork-protected files policy (.github/fork-protected-files.txt)
+          KEEP_OURS_TOUCHED=""
+          REVIEW_TOUCHED=""
+          STAGED_FILES=$(git diff --cached --name-only)
+          PLAYER_CHANGED_COUNT=$(printf '%s\n' "$STAGED_FILES" | grep -c '^packages/player/' || true)
+
+          if [ -f .github/fork-protected-files.txt ]; then
+            while IFS= read -r line; do
+              [[ -z "$line" || "$line" =~ ^# ]] && continue
+              policy=$(awk '{print $1}' <<< "$line")
+              pattern=$(awk '{print $2}' <<< "$line")
+              [ -z "$pattern" ] && continue
+              while IFS= read -r changed; do
+                [ -z "$changed" ] && continue
+                if [[ "$changed" == "$pattern" || ( "$pattern" == */ && "$changed" == "${pattern}"* ) ]]; then
+                  if [ "$policy" = "keep-ours" ]; then
+                    KEEP_OURS_TOUCHED="${KEEP_OURS_TOUCHED}"$'\n'"- \`${changed}\` (protected \`keep-ours\`)"
+                  elif [ "$policy" = "review-required" ]; then
+                    REVIEW_TOUCHED="${REVIEW_TOUCHED}"$'\n'"- \`${changed}\`"
+                  fi
+                fi
+              done <<< "$STAGED_FILES"
+            done < .github/fork-protected-files.txt
+          fi
+
           REMAINING=$(git diff --name-only --diff-filter=U)
-          if [ -z "$REMAINING" ]; then
+          if [ -z "$REMAINING" ] && [ -z "$KEEP_OURS_TOUCHED" ]; then
             git commit -m "chore(upstream): sync ${NEW_COUNT} commits from nukeop/nuclear (${UPSTREAM_SHA})"
+            if [ -n "$REVIEW_TOUCHED" ]; then
+              echo "$REVIEW_TOUCHED" | sed '/^$/d' | sort -u > /tmp/protected-touched.md
+              PROTECTED_FLAG="true"
+            else
+              : > /tmp/protected-touched.md
+              PROTECTED_FLAG="false"
+            fi
+            LARGE_BLAST="false"
+            if [ "$PLAYER_CHANGED_COUNT" -gt 40 ]; then
+              LARGE_BLAST="true"
+            fi
             {
               echo "has_updates=true"
               echo "status=clean"
+              echo "protected_touched=${PROTECTED_FLAG}"
+              echo "large_blast=${LARGE_BLAST}"
+              echo "player_changed_count=${PLAYER_CHANGED_COUNT}"
               echo "new_count=${NEW_COUNT}"
               echo "upstream_sha=${UPSTREAM_SHA}"
               echo "merge_base=${MERGE_BASE}"
@@ -107,6 +161,11 @@ jobs:
             done <<< "$REMAINING"
 
             {
+              if [ -n "$KEEP_OURS_TOUCHED" ]; then
+                echo "### Protected Fork-Only Files Modified by Upstream (Blocked)"
+                echo "$KEEP_OURS_TOUCHED" | sed '/^$/d' | sort -u
+                echo ""
+              fi
               echo "### Source / Config Conflicts"
               if [ -n "$SRC_CONFLICTS" ]; then
                 echo "$SRC_CONFLICTS" | sed '/^$/d'
@@ -122,7 +181,7 @@ jobs:
               fi
             } > /tmp/conflict-details.md
 
-            git merge --abort
+            git merge --abort || true
             git checkout main
 
             {
@@ -147,18 +206,27 @@ jobs:
             gh issue close "$ISSUE_NUM" --comment "Repository is now up to date with nukeop/nuclear."
           fi
 
-      - name: Setup PNPM
-        if: steps.merge.outputs.status == 'clean'
-        uses: pnpm/action-setup@v6
-
       - name: Setup Node.js
         if: steps.merge.outputs.status == 'clean'
         uses: actions/setup-node@v7
         with:
           node-version: "24"
 
-      - name: Install dependencies and capture lockfile updates
+      - name: Run fast fork integrity guard
+        id: integrity
         if: steps.merge.outputs.status == 'clean'
+        continue-on-error: true
+        shell: bash
+        run: node scripts/verify-fork-integrity.mjs
+
+      - name: Setup PNPM
+        if: steps.merge.outputs.status == 'clean' && steps.integrity.outcome == 'success'
+        uses: pnpm/action-setup@v6
+
+      - name: Install dependencies and capture lockfile updates
+        id: install
+        if: steps.merge.outputs.status == 'clean' && steps.integrity.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           pnpm install --no-frozen-lockfile
@@ -169,84 +237,187 @@ jobs:
 
       - name: Build workspace packages and frontend
         id: build
-        if: steps.merge.outputs.status == 'clean'
+        if: steps.merge.outputs.status == 'clean' && steps.install.outcome == 'success'
+        continue-on-error: true
         shell: bash
         run: |
           pnpm turbo build --filter='@nuclearplayer/player^...'
           pnpm --filter @nuclearplayer/player build:frontend
 
-      - name: Run player tests on merged branch
+      - name: Run fork safeguards and full player test suite
         id: tests
-        if: steps.merge.outputs.status == 'clean'
+        if: steps.merge.outputs.status == 'clean' && steps.build.outcome == 'success'
         continue-on-error: true
         shell: bash
         run: pnpm --filter @nuclearplayer/player test
 
-      - name: Push verified branch and open/update upstream sync PR
-        if: steps.merge.outputs.status == 'clean'
+      - name: Install Linux Rust build dependencies
+        if: steps.merge.outputs.status == 'clean' && steps.tests.outcome == 'success'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            libdbus-1-dev \
+            libssl-dev
+
+      - name: Setup Rust (Desktop + Android target)
+        if: steps.merge.outputs.status == 'clean' && steps.tests.outcome == 'success'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cache Cargo dependencies
+        if: steps.merge.outputs.status == 'clean' && steps.tests.outcome == 'success'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/player/src-tauri -> target
+
+      - name: Verify Linux Rust binary, Rust unit tests, and Android Rust cross-compile
+        id: rust
+        if: steps.merge.outputs.status == 'clean' && steps.tests.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo check --manifest-path packages/player/src-tauri/Cargo.toml --bins
+          cargo test --manifest-path packages/player/src-tauri/Cargo.toml --lib
+
+          NDK_DIR="${ANDROID_NDK_LATEST_HOME:-${ANDROID_NDK_HOME:-}}"
+          if [ -n "$NDK_DIR" ] && [ -d "$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin" ]; then
+            TOOLCHAIN="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
+            export PATH="$TOOLCHAIN:$PATH"
+            export CC_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android24-clang"
+            export CXX_aarch64_linux_android="$TOOLCHAIN/aarch64-linux-android24-clang++"
+            export AR_aarch64_linux_android="$TOOLCHAIN/llvm-ar"
+            export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$TOOLCHAIN/aarch64-linux-android24-clang"
+          fi
+          cargo check --manifest-path packages/player/src-tauri/Cargo.toml --target aarch64-linux-android --lib
+
+      - name: Push verified branch and open/update PR (ONLY when ALL checks pass)
+        if: >-
+          steps.merge.outputs.status == 'clean' &&
+          steps.integrity.outcome == 'success' &&
+          steps.install.outcome == 'success' &&
+          steps.build.outcome == 'success' &&
+          steps.tests.outcome == 'success' &&
+          steps.rust.outcome == 'success'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           git push --force origin upstream-sync
 
           gh label create upstream-sync --color 1D76DB --description "Automated upstream sync from nukeop/nuclear" --force
 
-          TEST_OUTCOME="${{ steps.tests.outcome }}"
           NEW_COUNT="${{ steps.merge.outputs.new_count }}"
           UPSTREAM_SHA="${{ steps.merge.outputs.upstream_sha }}"
           MERGE_BASE="${{ steps.merge.outputs.merge_base }}"
+          PROTECTED_TOUCHED="${{ steps.merge.outputs.protected_touched }}"
+          LARGE_BLAST="${{ steps.merge.outputs.large_blast }}"
+          PLAYER_CHANGED="${{ steps.merge.outputs.player_changed_count }}"
+          FORCE_DRAFT="false"
+          if [ "$PROTECTED_TOUCHED" = "true" ] || [ "$LARGE_BLAST" = "true" ]; then
+            FORCE_DRAFT="true"
+          fi
 
           {
             echo "## Automated Upstream Sync from \`nukeop/nuclear\`"
             echo ""
             echo "- **Upstream commits:** ${NEW_COUNT} new commits since \`${MERGE_BASE}\` (up to \`${UPSTREAM_SHA}\`)"
-            echo "- **Merge status:** Clean merge — zero fork files were overwritten"
-            echo "- **Workspace + frontend build:** Passed"
-            echo "- **Player tests (\`pnpm --filter @nuclearplayer/player test\`):** \`${TEST_OUTCOME}\`"
+            echo "- **Files changed in \`packages/player/\`:** ${PLAYER_CHANGED}"
+            echo "- **Fork integrity guard (\`verify-fork-integrity.mjs\`):** Passed"
+            echo "- **Lockfile & workspace/frontend build:** Passed"
+            echo "- **Fork safeguards & full Vitest suite:** Passed"
+            echo "- **Linux Rust check/tests + Android \`aarch64-linux-android\` compile:** Passed"
             echo ""
+            if [ "$PROTECTED_TOUCHED" = "true" ]; then
+              echo "> [!WARNING]"
+              echo "> **Protected shared fork files were modified by upstream.**"
+              echo "> This PR was forced into **Draft** — inspect the diff on these files before merging:"
+              echo ""
+              cat /tmp/protected-touched.md
+              echo ""
+            fi
+            if [ "$LARGE_BLAST" = "true" ]; then
+              echo "> [!CAUTION]"
+              echo "> **Large upstream blast radius (${PLAYER_CHANGED} files in \`packages/player/\`).**"
+              echo "> This PR was forced into **Draft** for manual review."
+              echo ""
+            fi
             echo "## New Upstream Commits"
             cat /tmp/upstream-commits.md
+            echo ""
+            echo "## Instant Rollback (if ever needed after merge)"
+            echo "\`\`\`bash"
+            echo "git revert -m 1 <merge-commit-sha>"
+            echo "\`\`\`"
           } > /tmp/pr-body.md
 
           TITLE="chore(upstream): sync ${NEW_COUNT} commits from nukeop/nuclear (${UPSTREAM_SHA})"
           PR_NUM=$(gh pr list --head upstream-sync --state open --json number --jq '.[0].number // empty')
           if [ -n "$PR_NUM" ]; then
             gh pr edit "$PR_NUM" --title "$TITLE" --body-file /tmp/pr-body.md
+            if [ "$FORCE_DRAFT" = "true" ]; then
+              gh pr ready "$PR_NUM" --undo || true
+            fi
           else
-            gh pr create --base main --head upstream-sync --label upstream-sync --title "$TITLE" --body-file /tmp/pr-body.md
+            if [ "$FORCE_DRAFT" = "true" ]; then
+              gh pr create --draft --base main --head upstream-sync --label upstream-sync --title "$TITLE" --body-file /tmp/pr-body.md
+            else
+              gh pr create --base main --head upstream-sync --label upstream-sync --title "$TITLE" --body-file /tmp/pr-body.md
+            fi
           fi
 
           PR_URL=$(gh pr list --head upstream-sync --state open --json url --jq '.[0].url // empty')
           ISSUE_NUM=$(gh issue list --label upstream-sync --state open --json number --jq '.[0].number // empty')
           if [ -n "$ISSUE_NUM" ]; then
-            gh issue close "$ISSUE_NUM" --comment "Upstream changes now merge cleanly in ${PR_URL}."
+            gh issue close "$ISSUE_NUM" --comment "Upstream changes now pass all fork safeguards and checks in ${PR_URL}."
           fi
 
-      - name: Open or update conflict tracking issue
-        if: steps.merge.outputs.status == 'conflicts'
+      - name: Block broken sync and open/update tracking issue
+        if: >-
+          steps.merge.outputs.has_updates == 'true' && (
+            steps.merge.outputs.status == 'conflicts' ||
+            steps.integrity.outcome != 'success' ||
+            steps.install.outcome != 'success' ||
+            steps.build.outcome != 'success' ||
+            steps.tests.outcome != 'success' ||
+            steps.rust.outcome != 'success'
+          )
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           gh label create upstream-sync --color 1D76DB --description "Automated upstream sync from nukeop/nuclear" --force
 
           NEW_COUNT="${{ steps.merge.outputs.new_count }}"
           UPSTREAM_SHA="${{ steps.merge.outputs.upstream_sha }}"
           MERGE_BASE="${{ steps.merge.outputs.merge_base }}"
-          CLEAN_COUNT="${{ steps.merge.outputs.clean_count }}"
+          MERGE_STATUS="${{ steps.merge.outputs.status }}"
 
           {
-            echo "## Upstream Sync Report (\`nukeop/nuclear\`)"
+            echo "## Upstream Sync Blocked by Safeguards (\`nukeop/nuclear\`)"
             echo ""
             echo "- **New commits:** ${NEW_COUNT} commits from \`nukeop/nuclear\` since \`${MERGE_BASE}\` (up to \`${UPSTREAM_SHA}\`)"
-            echo "- **Files that merge cleanly:** ${CLEAN_COUNT}"
-            echo "- **Protection status:** Merge conflicts were detected in shared files, so \`main\` was **not** modified and zero fork files were overwritten."
+            echo "- **Protection status:** \`main\` was **not** modified and no broken PR branch was pushed."
+            echo "- **Merge:** \`${MERGE_STATUS}\`"
+            echo "- **Fork integrity guard:** \`${{ steps.integrity.outcome }}\`"
+            echo "- **Install:** \`${{ steps.install.outcome }}\`"
+            echo "- **Build:** \`${{ steps.build.outcome }}\`"
+            echo "- **Vitest + Fork Safeguards:** \`${{ steps.tests.outcome }}\`"
+            echo "- **Linux + Android Rust check/tests:** \`${{ steps.rust.outcome }}\`"
+            echo "- **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
             echo ""
-            cat /tmp/conflict-details.md
-            echo ""
+            if [ "$MERGE_STATUS" = "conflicts" ] && [ -f /tmp/conflict-details.md ]; then
+              cat /tmp/conflict-details.md
+              echo ""
+            fi
             echo "## New Upstream Commits"
             cat /tmp/upstream-commits.md
             echo ""
@@ -255,11 +426,18 @@ jobs:
             echo "git fetch upstream"
             echo "git checkout -b upstream-sync main"
             echo "git merge upstream/master"
-            echo "# Resolve conflicts while keeping fork features, then run tests and merge into main"
+            echo "pnpm verify:fork"
+            echo "pnpm install --no-frozen-lockfile"
+            echo "pnpm turbo build --filter='@nuclearplayer/player^...'"
+            echo "pnpm --filter @nuclearplayer/player build:frontend"
+            echo "pnpm --filter @nuclearplayer/player test"
+            echo "cargo check --manifest-path packages/player/src-tauri/Cargo.toml --bins"
+            echo "cargo test --manifest-path packages/player/src-tauri/Cargo.toml --lib"
+            echo "cargo check --manifest-path packages/player/src-tauri/Cargo.toml --target aarch64-linux-android --lib"
             echo "\`\`\`"
           } > /tmp/issue-body.md
 
-          TITLE="Upstream sync: ${NEW_COUNT} new commits from nukeop/nuclear (conflicts need review)"
+          TITLE="Upstream sync blocked: ${NEW_COUNT} commits from nukeop/nuclear (${UPSTREAM_SHA})"
           ISSUE_NUM=$(gh issue list --label upstream-sync --state open --json number --jq '.[0].number // empty')
           if [ -n "$ISSUE_NUM" ]; then
             gh issue edit "$ISSUE_NUM" --title "$TITLE" --body-file /tmp/issue-body.md

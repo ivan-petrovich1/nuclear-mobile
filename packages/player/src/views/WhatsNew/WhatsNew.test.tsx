@@ -5,6 +5,10 @@ vi.mock('../../../changelog.json', () => ({
   default: TEST_CHANGELOG,
 }));
 
+vi.mock('../../../fork-changelog.json', () => ({
+  default: [],
+}));
+
 vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn().mockResolvedValue([]),
 }));

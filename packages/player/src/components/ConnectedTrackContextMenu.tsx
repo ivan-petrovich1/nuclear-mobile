@@ -7,6 +7,7 @@ import {
   ListStart,
   Loader2,
   Play,
+  Share2,
 } from 'lucide-react';
 import { FC, ReactNode } from 'react';
 
@@ -16,6 +17,7 @@ import { Input, TrackContextMenu } from '@nuclearplayer/ui';
 
 import { usePlaylistSubmenu } from '../hooks/usePlaylistSubmenu';
 import { useTrackActions } from '../hooks/useTrackActions';
+import { shareTrack } from '../services/shareService';
 import { getTrackDownloadKey, useDownloadStore } from '../stores/downloadStore';
 
 type ConnectedTrackContextMenuProps = {
@@ -84,6 +86,12 @@ export const ConnectedTrackContextMenu: FC<ConnectedTrackContextMenuProps> = ({
             : isDownloaded
               ? 'Downloaded ✓ (Tap to remove)'
               : 'Download Song'}
+        </TrackContextMenu.Action>
+        <TrackContextMenu.Action
+          icon={<Share2 size={16} />}
+          onClick={() => void shareTrack(track)}
+        >
+          Share Song
         </TrackContextMenu.Action>
         <TrackContextMenu.Action
           icon={<ListStart size={16} />}

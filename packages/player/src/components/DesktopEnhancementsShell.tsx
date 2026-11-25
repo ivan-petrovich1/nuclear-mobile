@@ -36,6 +36,7 @@ import { pickArtwork, type RepeatMode, type Track } from '@nuclearplayer/model';
 
 import { useCoreSetting } from '../hooks/useCoreSetting';
 import { useCurrentQueueItem } from '../hooks/useCurrentQueueItem';
+import { useQueue } from '../hooks/useQueue';
 import { useTrackActions } from '../hooks/useTrackActions';
 import { spinForgottenGem } from '../services/endlessRadio';
 import {
@@ -45,6 +46,7 @@ import {
 } from '../services/mobileEnhancements';
 import { useP2pSyncStore } from '../services/p2pSync';
 import { playbackManager } from '../services/playback';
+import { shareTrack } from '../services/shareService';
 import { resolveAllProviderCandidates } from '../services/streamingHost';
 import {
   shareTrackVibeCard,
@@ -85,11 +87,10 @@ const HUB_TABS: Array<{ id: DesktopHubTab; label: string }> = [
 
 export const DesktopEnhancementsShell: FC = () => {
   const currentItem = useCurrentQueueItem();
-  const queueItems = useQueueStore((s) => s.items);
-  const currentIndex = useQueueStore((s) => s.currentIndex);
+  const { items: queueItems, currentIndex } = useQueue();
   const goToNext = useQueueStore((s) => s.goToNext);
   const goToPrevious = useQueueStore((s) => s.goToPrevious);
-  const goToIndex = useQueueStore((s) => s.goToIndex);
+  const goToId = useQueueStore((s) => s.goToId);
   const clearQueue = useQueueStore((s) => s.clearQueue);
 
   const { status, seek: position, duration } = useSoundStore();
@@ -993,6 +994,15 @@ export const DesktopEnhancementsShell: FC = () => {
                         <button
                           type="button"
                           className="flex size-9 items-center justify-center rounded-full bg-black/25 hover:bg-black/40"
+                          onClick={() => void shareTrack(track)}
+                          aria-label="Share Song"
+                          title="Share Song Link"
+                        >
+                          <Share2 size={17} />
+                        </button>
+                        <button
+                          type="button"
+                          className="flex size-9 items-center justify-center rounded-full bg-black/25 hover:bg-black/40"
                           onClick={() =>
                             void shareTrackVibeCard({
                               title: track.title,
@@ -1008,7 +1018,7 @@ export const DesktopEnhancementsShell: FC = () => {
                           aria-label="Share Vibe Card"
                           title="Download Track Vibe Card"
                         >
-                          <Share2 size={17} />
+                          <Sparkles size={16} />
                         </button>
                         <button
                           type="button"
@@ -1395,7 +1405,7 @@ export const DesktopEnhancementsShell: FC = () => {
                       <div
                         key={item.id}
                         onClick={() => {
-                          goToIndex(idx);
+                          goToId(item.id);
                           playbackManager.play();
                         }}
                         className={`flex cursor-pointer items-center justify-between rounded-lg px-3 py-2 ${

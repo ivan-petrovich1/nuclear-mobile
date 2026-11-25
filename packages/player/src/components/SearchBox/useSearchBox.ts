@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { KeyboardEvent, RefObject, useRef, useState } from 'react';
 
+import { maybeTriggerSearchEasterEgg } from '../../services/searchEasterEggs';
 import { useRecentSearches } from './useRecentSearches';
 import { useSearchPopover } from './useSearchPopover';
 import { useSearchQuery } from './useSearchQuery';
@@ -16,6 +17,7 @@ export const useSearchBox = () => {
   const closePopover = () => setIsPopoverOpen(false);
 
   const goToSearch = (searchQuery: string) => {
+    maybeTriggerSearchEasterEgg(searchQuery);
     navigate({ to: '/search', search: { q: searchQuery } });
     inputRef.current?.blur();
   };

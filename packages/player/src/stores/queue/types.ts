@@ -18,6 +18,7 @@ export type QueueStore = Pick<Queue, 'items' | 'currentIndex'> & {
   removeByIds: (ids: string[]) => void;
   removeByIndices: (indices: number[]) => void;
   clearQueue: () => void;
+  shuffleQueue: (shuffleAll?: boolean) => void;
   reorder: (fromIndex: number, toIndex: number) => void;
   moveBefore: (itemId: string, beforeItemId: string | null) => void;
   updateItemState: (id: string, updates: Partial<QueueItem>) => void;
