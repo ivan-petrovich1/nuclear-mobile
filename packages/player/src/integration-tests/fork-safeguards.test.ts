@@ -404,4 +404,32 @@ describe('Fork safeguards (protects custom features across upstream syncs)', () 
       expect(forkLog.every((e) => e.author === 'ivan')).toBe(true);
     });
   });
+
+  describe('Repeat-one playback safeguards', () => {
+    it('restarts the underlying <audio> element when a track ends in repeat-one mode', () => {
+      useSettingsStore.setState({ values: { 'core.playback.repeat': 'one' } });
+      useQueueStore.getState().addToQueue([createQueueItem('Loop Me').track]);
+
+      const audio = document.createElement('audio');
+      audio.currentTime = 120;
+      const pauseSpy = vi.spyOn(audio, 'pause').mockImplementation(() => {});
+      const playSpy = vi.spyOn(audio, 'play').mockResolvedValue(undefined);
+      document.body.appendChild(audio);
+
+      try {
+        playbackManager.finishTrack();
+        expect(pauseSpy).toHaveBeenCalledTimes(1);
+        expect(audio.currentTime).toBe(0);
+        expect(playSpy).toHaveBeenCalledTimes(1);
+
+        // Async engines (WebKitGTK GStreamer / MSE) may finish seeking asynchronously
+        audio.dispatchEvent(new Event('seeked'));
+        expect(playSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        pauseSpy.mockRestore();
+        playSpy.mockRestore();
+        audio.remove();
+      }
+    });
+  });
 });

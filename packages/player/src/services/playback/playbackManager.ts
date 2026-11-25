@@ -95,6 +95,22 @@ export class PlaybackManager {
 
     if (playbackSettings.repeatMode === 'one') {
       useSoundStore.getState().seekTo(0);
+      useSoundStore.getState().play();
+      if (typeof document !== 'undefined') {
+        const audio = document.querySelector('audio');
+        if (audio) {
+          const restartAudio = () => {
+            if (useSoundStore.getState().status !== 'playing') {
+              return;
+            }
+            void audio.play().catch(() => {});
+          };
+          audio.pause();
+          audio.currentTime = 0;
+          audio.addEventListener('seeked', restartAudio, { once: true });
+          restartAudio();
+        }
+      }
       eventBus.emit('trackStarted', item.track);
       return;
     }

@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-11-25T08:05",
+    "description": "v1.0.7 — Fixed Repeat One pausing at track end instead of looping automatically (WebKitGTK/GStreamer, MSE & Chromium WebView) and fixed Live Lyric Ticker stale-track race & duration matching.",
+    "type": "fix",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.0.7", "color": "purple" },
+      { "label": "Playback", "color": "green" }
+    ]
+  },
+  {
     "date": "2026-11-25T06:58",
     "description": "v1.0.7 — Live Floating Lyric Line on the Desktop Player Bar & Android Mini-Player (click to open full synced lyrics, 1-click toggle) + hidden search Easter Egg.",
     "type": "feature",

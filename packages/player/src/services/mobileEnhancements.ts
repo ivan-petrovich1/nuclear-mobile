@@ -1233,6 +1233,7 @@ export const initMobileEnhancements = () => {
       );
       if (
         crossfadeSeconds > 0 &&
+        playbackSettings.repeatMode !== 'one' &&
         soundState.status === 'playing' &&
         soundState.duration > 20
       ) {

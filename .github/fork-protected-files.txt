@@ -15,6 +15,7 @@ keep-ours packages/player/fork-changelog.json
 keep-ours README.md
 keep-ours scripts/verify-fork-integrity.mjs
 keep-ours scripts/build-local-appimage.sh
+keep-ours scripts/build-local-windows.sh
 keep-ours .husky/pre-commit
 keep-ours .gitattributes
 keep-ours .github/fork-protected-files.txt
@@ -39,6 +40,7 @@ review-required packages/player/src/stores/queue/playOrder.ts
 review-required packages/player/src/stores/queue/actions/editing.ts
 review-required packages/player/src/stores/queue/persistence.ts
 review-required packages/player/src/services/playback/playbackManager.ts
+review-required packages/hifi/src/hooks/usePlaybackStatus.ts
 review-required packages/player/src/services/coreSettings.ts
 review-required packages/player/src/services/personalizedFeed.ts
 review-required packages/player/src/services/shareService.ts

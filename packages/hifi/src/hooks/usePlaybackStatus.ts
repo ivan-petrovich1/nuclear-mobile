@@ -27,7 +27,7 @@ export const usePlaybackStatus = (
       if (!isReadyToPlay(audio)) {
         return;
       }
-      if (!audio.paused) {
+      if (!audio.paused && !audio.ended) {
         return;
       }
       activeSrcRef.current = srcUrl;
@@ -47,9 +47,11 @@ export const usePlaybackStatus = (
         const onCanPlay = () => tryPlay();
         audio.addEventListener('canplay', onCanPlay);
         audio.addEventListener('loadeddata', onCanPlay);
+        audio.addEventListener('seeked', onCanPlay);
         return () => {
           audio.removeEventListener('canplay', onCanPlay);
           audio.removeEventListener('loadeddata', onCanPlay);
+          audio.removeEventListener('seeked', onCanPlay);
         };
       }
       case 'paused': {
