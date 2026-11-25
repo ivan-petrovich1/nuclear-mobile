@@ -95,6 +95,7 @@ type MobileEnhancementsState = {
   loudnessBoostDb: number;
   eqBands: [number, number, number, number, number];
   dominantColor: string;
+  lyricsTrackItemId: string | null;
   syncedLyrics: LrcLine[];
   plainLyrics: string | null;
   lyricsLoading: boolean;
@@ -170,6 +171,7 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
       loudnessBoostDb: 0,
       eqBands: [0, 0, 0, 0, 0],
       dominantColor: '#7c3aed',
+      lyricsTrackItemId: null,
       syncedLyrics: [],
       plainLyrics: null,
       lyricsLoading: false,
@@ -417,47 +419,250 @@ const extractColorFromTrack = (track: Track): Promise<string> => {
   });
 };
 
-const fetchLyricsForTrack = async (track: Track) => {
+type LrcLibResult = {
+  trackName?: string;
+  artistName?: string;
+  duration?: number;
+  syncedLyrics?: string;
+  plainLyrics?: string;
+};
+
+const normalizeMatchText = (raw: string): string =>
+  raw
+    .toLowerCase()
+    .replace(/[([{].*?[)\]}]/g, ' ')
+    .replace(/feat\.?|ft\.?|featuring/gi, ' ')
+    .replace(
+      /[^a-z0-9\u0400-\u04ff\u0590-\u05ff\u3040-\u30ff\u4e00-\u9fff]+/g,
+      ' ',
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const cleanSearchTitle = (raw: string): string =>
+  raw
+    .replace(
+      /\s*[([]\s*(?:feat\.?|ft\.?|featuring|official.*|lyrics.*|audio.*|video.*|sped\s*up|slowed.*|nightcore.*|radio\s*edit|club\s*mix|airplay\s*mix|remaster.*)\s*[)\]]/gi,
+      '',
+    )
+    .replace(
+      /\s*-\s*(?:sped\s*up|slowed.*|nightcore.*|radio\s*edit|club\s*mix|airplay\s*mix|original\s*mix|instrumental.*)$/gi,
+      '',
+    )
+    .trim();
+
+export const pickBestLrcCandidate = (
+  results: LrcLibResult[],
+  track: Pick<Track, 'title' | 'artists' | 'durationMs'>,
+  requireSynced: boolean,
+): LrcLibResult | undefined => {
+  const normTitle = normalizeMatchText(track.title ?? '');
+  const titleWords = normTitle.split(' ').filter((w) => w.length > 1);
+  const normArtists = (track.artists ?? [])
+    .map((a) => normalizeMatchText(a.name ?? ''))
+    .filter(Boolean);
+  const targetSec =
+    track.durationMs && track.durationMs > 0 ? track.durationMs / 1000 : null;
+
+  let best: LrcLibResult | undefined;
+  let bestScore = -Infinity;
+
+  for (const candidate of results) {
+    if (requireSynced && !candidate.syncedLyrics) {
+      continue;
+    }
+    if (!requireSynced && !candidate.plainLyrics) {
+      continue;
+    }
+
+    const candTitle = normalizeMatchText(candidate.trackName ?? '');
+    const candArtist = normalizeMatchText(candidate.artistName ?? '');
+
+    // Reject completely unrelated songs
+    const exactTitle = Boolean(normTitle && candTitle === normTitle);
+    const containsTitle = Boolean(
+      normTitle &&
+      candTitle &&
+      (candTitle.includes(normTitle) || normTitle.includes(candTitle)),
+    );
+    const matchingWords = titleWords.filter((w) =>
+      candTitle.includes(w),
+    ).length;
+    const wordRatio =
+      titleWords.length > 0 ? matchingWords / titleWords.length : 0;
+
+    if (!exactTitle && !containsTitle && wordRatio < 0.5) {
+      continue;
+    }
+
+    let score = 0;
+    if (exactTitle) {
+      score += 50;
+    } else if (containsTitle) {
+      score += 30;
+    } else {
+      score += Math.round(wordRatio * 25);
+    }
+
+    const artistMatched = normArtists.some(
+      (a) => candArtist.includes(a) || a.includes(candArtist),
+    );
+    if (artistMatched) {
+      score += 40;
+    } else if (normArtists.length > 0 && candArtist) {
+      score -= 15;
+    }
+
+    if (
+      targetSec !== null &&
+      typeof candidate.duration === 'number' &&
+      candidate.duration > 0
+    ) {
+      const diff = Math.abs(candidate.duration - targetSec);
+      score += Math.max(-25, 25 - diff * 0.5);
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = candidate;
+    }
+  }
+
+  return best;
+};
+
+let lyricsRequestSeq = 0;
+let lastLrcBatch: {
+  itemId: string;
+  track: Track;
+  results: LrcLibResult[];
+  matchedDurationSec: number | null;
+} | null = null;
+
+const applyBestLyricsFromBatch = (
+  itemId: string,
+  track: Track,
+  results: LrcLibResult[],
+  overrideDurationSec?: number | null,
+) => {
+  const effectiveTrack =
+    overrideDurationSec && overrideDurationSec > 10
+      ? { ...track, durationMs: overrideDurationSec * 1000 }
+      : track;
+  const withSynced = pickBestLrcCandidate(results, effectiveTrack, true);
+  if (withSynced?.syncedLyrics) {
+    lastLrcBatch = {
+      itemId,
+      track,
+      results,
+      matchedDurationSec: withSynced.duration ?? null,
+    };
+    useMobileEnhancementsStore.setState({
+      lyricsTrackItemId: itemId,
+      syncedLyrics: parseLrc(withSynced.syncedLyrics),
+      plainLyrics: withSynced.plainLyrics ?? null,
+      lyricsLoading: false,
+    });
+    return true;
+  }
+
+  const withPlain = pickBestLrcCandidate(results, effectiveTrack, false);
+  if (withPlain?.plainLyrics) {
+    lastLrcBatch = {
+      itemId,
+      track,
+      results,
+      matchedDurationSec: withPlain.duration ?? null,
+    };
+    useMobileEnhancementsStore.setState({
+      lyricsTrackItemId: itemId,
+      syncedLyrics: [],
+      plainLyrics: withPlain.plainLyrics,
+      lyricsLoading: false,
+    });
+    return true;
+  }
+  return false;
+};
+
+const queryLrcLib = async (url: string): Promise<LrcLibResult[]> => {
+  const resp = await httpHost.fetch(url, {
+    headers: { 'User-Agent': 'NuclearPlayer/1.0.7' },
+  });
+  if (resp.status !== 200 || !resp.body) {
+    return [];
+  }
+  const parsed = JSON.parse(resp.body) as unknown;
+  return Array.isArray(parsed) ? (parsed as LrcLibResult[]) : [];
+};
+
+const fetchLyricsForTrack = async (itemId: string, track: Track) => {
+  const reqSeq = ++lyricsRequestSeq;
+  lastLrcBatch = null;
   useMobileEnhancementsStore.setState({
     lyricsLoading: true,
+    lyricsTrackItemId: itemId,
     syncedLyrics: [],
     plainLyrics: null,
   });
+
+  const isStillCurrent = () =>
+    reqSeq === lyricsRequestSeq &&
+    useQueueStore.getState().getCurrentItem()?.id === itemId;
+
   const artist = track.artists?.[0]?.name ?? '';
-  const title = track.title ?? '';
+  const rawTitle = track.title ?? '';
+  const cleanedTitle = cleanSearchTitle(rawTitle) || rawTitle;
+
+  const urls: string[] = [];
+  if (artist && cleanedTitle) {
+    urls.push(
+      `https://lrclib.net/api/search?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(cleanedTitle)}`,
+    );
+  }
+  const fullQ = `${artist} ${rawTitle}`.trim();
+  if (fullQ) {
+    urls.push(`https://lrclib.net/api/search?q=${encodeURIComponent(fullQ)}`);
+  }
+
   try {
-    const q = encodeURIComponent(`${artist} ${title}`.trim());
-    const resp = await httpHost.fetch(`https://lrclib.net/api/search?q=${q}`, {
-      headers: { 'User-Agent': 'NuclearPlayer/1.55.0' },
-    });
-    if (resp.status === 200 && resp.body) {
-      const results = JSON.parse(resp.body) as Array<{
-        syncedLyrics?: string;
-        plainLyrics?: string;
-      }>;
-      const withSynced = results.find((r) => Boolean(r.syncedLyrics));
-      if (withSynced?.syncedLyrics) {
-        useMobileEnhancementsStore.setState({
-          syncedLyrics: parseLrc(withSynced.syncedLyrics),
-          plainLyrics: withSynced.plainLyrics ?? null,
-          lyricsLoading: false,
-        });
+    const allResults: LrcLibResult[] = [];
+    for (const url of urls) {
+      if (!isStillCurrent()) {
         return;
       }
-      const withPlain = results.find((r) => Boolean(r.plainLyrics));
-      if (withPlain?.plainLyrics) {
-        useMobileEnhancementsStore.setState({
-          syncedLyrics: [],
-          plainLyrics: withPlain.plainLyrics,
-          lyricsLoading: false,
-        });
-        return;
+      const batch = await queryLrcLib(url);
+      allResults.push(...batch);
+      if (pickBestLrcCandidate(allResults, track, true)) {
+        break;
       }
+    }
+
+    if (!isStillCurrent()) {
+      return;
+    }
+
+    const liveDur = useSoundStore.getState().duration;
+    if (
+      applyBestLyricsFromBatch(
+        itemId,
+        track,
+        allResults,
+        liveDur > 10 ? liveDur : null,
+      )
+    ) {
+      return;
     }
   } catch {
     // Ignore lyrics lookup errors
   }
+
+  if (!isStillCurrent()) {
+    return;
+  }
+
   useMobileEnhancementsStore.setState({
+    lyricsTrackItemId: itemId,
     syncedLyrics: [],
     plainLyrics: null,
     lyricsLoading: false,
@@ -873,10 +1078,23 @@ export const initMobileEnhancements = () => {
   let lastVideoId: string | undefined;
   let lastSkippedSegEnd = -1;
   let lastStatsTickAt = Date.now();
+  let trackEffectsTimer: number | null = null;
 
   const onQueueChanged = () => {
     const currentItem = useQueueStore.getState().getCurrentItem();
     if (!currentItem) {
+      if (trackEffectsTimer !== null && typeof window !== 'undefined') {
+        window.clearTimeout(trackEffectsTimer);
+        trackEffectsTimer = null;
+      }
+      lyricsRequestSeq++;
+      lastTrackItemId = undefined;
+      useMobileEnhancementsStore.setState({
+        lyricsTrackItemId: null,
+        syncedLyrics: [],
+        plainLyrics: null,
+        lyricsLoading: false,
+      });
       return;
     }
 
@@ -891,21 +1109,52 @@ export const initMobileEnhancements = () => {
     if (currentItem.id !== lastTrackItemId) {
       lastTrackItemId = currentItem.id;
       lastSkippedSegEnd = -1;
+      lyricsRequestSeq++;
       useMobileEnhancementsStore.getState().clearLoop();
-      useWrappedStatsStore.getState().recordTrackPlay(currentItem.track);
-      void extractColorFromTrack(currentItem.track).then((dominantColor) => {
-        useMobileEnhancementsStore.setState({ dominantColor });
+      // Immediately clear previous track's lyrics so stale lyrics never flash
+      useMobileEnhancementsStore.setState({
+        lyricsTrackItemId: currentItem.id,
+        syncedLyrics: [],
+        plainLyrics: null,
+        lyricsLoading: true,
       });
-      void fetchLyricsForTrack(currentItem.track);
-      syncMediaSessionMetadata(currentItem.track);
 
-      const autoDownloadEnabled = Boolean(
-        useSettingsStore
-          .getState()
-          .getValue('core.playback.autoDownloadPlayed'),
-      );
-      if (autoDownloadEnabled) {
-        void useDownloadStore.getState().downloadTrack(currentItem.track, true);
+      const targetItemId = currentItem.id;
+      const targetTrack = currentItem.track;
+      const runTrackEffects = () => {
+        if (useQueueStore.getState().getCurrentItem()?.id !== targetItemId) {
+          return;
+        }
+        useWrappedStatsStore.getState().recordTrackPlay(targetTrack);
+        void extractColorFromTrack(targetTrack).then((dominantColor) => {
+          if (useQueueStore.getState().getCurrentItem()?.id === targetItemId) {
+            useMobileEnhancementsStore.setState({ dominantColor });
+          }
+        });
+        void fetchLyricsForTrack(targetItemId, targetTrack);
+        syncMediaSessionMetadata(targetTrack);
+
+        const autoDownloadEnabled = Boolean(
+          useSettingsStore
+            .getState()
+            .getValue('core.playback.autoDownloadPlayed'),
+        );
+        if (autoDownloadEnabled) {
+          void useDownloadStore.getState().downloadTrack(targetTrack, true);
+        }
+      };
+
+      if (typeof window !== 'undefined') {
+        if (trackEffectsTimer !== null) {
+          window.clearTimeout(trackEffectsTimer);
+        }
+        // Short debounce avoids firing requests for Track #0 during clearQueue -> addToQueue -> goToIndex
+        trackEffectsTimer = window.setTimeout(() => {
+          trackEffectsTimer = null;
+          runTrackEffects();
+        }, 120);
+      } else {
+        runTrackEffects();
       }
     }
 
@@ -931,6 +1180,34 @@ export const initMobileEnhancements = () => {
 
   useSoundStore.subscribe((soundState) => {
     syncAudioElementDsp();
+
+    // If the resolved audio stream duration differs from metadata (e.g. album/video cut vs radio edit),
+    // re-pick the closest-duration synced lyrics from the cached LRCLIB batch with zero network calls.
+    if (
+      lastLrcBatch &&
+      soundState.duration > 10 &&
+      useQueueStore.getState().getCurrentItem()?.id === lastLrcBatch.itemId &&
+      (lastLrcBatch.matchedDurationSec === null ||
+        Math.abs(lastLrcBatch.matchedDurationSec - soundState.duration) > 8)
+    ) {
+      const batch = lastLrcBatch;
+      const better = pickBestLrcCandidate(
+        batch.results,
+        { ...batch.track, durationMs: soundState.duration * 1000 },
+        true,
+      );
+      if (
+        better?.syncedLyrics &&
+        better.duration !== batch.matchedDurationSec
+      ) {
+        applyBestLyricsFromBatch(
+          batch.itemId,
+          batch.track,
+          batch.results,
+          soundState.duration,
+        );
+      }
+    }
 
     const {
       sponsorBlockEnabled,

@@ -3,7 +3,10 @@ import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { registerBuiltInCoreSettings } from '../services/coreSettings';
-import { getActiveLyricLine } from '../services/mobileEnhancements';
+import {
+  getActiveLyricLine,
+  pickBestLrcCandidate,
+} from '../services/mobileEnhancements';
 import { playbackManager } from '../services/playback';
 import { maybeTriggerSearchEasterEgg } from '../services/searchEasterEggs';
 import {
@@ -311,6 +314,54 @@ describe('Fork safeguards (protects custom features across upstream syncs)', () 
       expect(getActiveLyricLine(lines, 12.1).next?.text).toBe('Third line');
       expect(getActiveLyricLine(lines, 25).current?.text).toBe('Third line');
       expect(getActiveLyricLine(lines, 25).next).toBeNull();
+    });
+
+    it('rejects unrelated lyrics and picks the closest-duration synced match', () => {
+      const track = {
+        title: 'Hello (feat. Dragonette)',
+        artists: [{ name: 'Martin Solveig', roles: [] }],
+        durationMs: 281_000,
+      };
+      const picked = pickBestLrcCandidate(
+        [
+          {
+            trackName: 'All The Things She Said',
+            artistName: 't.A.T.u.',
+            duration: 214,
+            syncedLyrics: '[00:05.00] All the things she said',
+          },
+          {
+            trackName: 'Hello',
+            artistName: 'Martin Solveig',
+            duration: 166,
+            syncedLyrics: '[00:05.00] Radio edit hello',
+          },
+          {
+            trackName: 'Hello (feat. Dragonette)',
+            artistName: 'Martin Solveig',
+            duration: 282,
+            syncedLyrics: '[00:05.00] I just came to say hello',
+          },
+        ],
+        track,
+        true,
+      );
+      expect(picked?.duration).toBe(282);
+      expect(picked?.syncedLyrics).toContain('I just came to say hello');
+
+      const rejected = pickBestLrcCandidate(
+        [
+          {
+            trackName: 'All The Things She Said',
+            artistName: 't.A.T.u.',
+            duration: 281,
+            syncedLyrics: '[00:05.00] Wrong song',
+          },
+        ],
+        track,
+        true,
+      );
+      expect(rejected).toBeUndefined();
     });
   });
 

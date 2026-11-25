@@ -18,6 +18,9 @@ export const LiveLyricTicker: FC<LiveLyricTickerProps> = ({ variant }) => {
     (s) => s.floatingLyricsEnabled,
   );
   const nowPlayingOpen = useMobileEnhancementsStore((s) => s.nowPlayingOpen);
+  const lyricsTrackItemId = useMobileEnhancementsStore(
+    (s) => s.lyricsTrackItemId,
+  );
   const syncedLyrics = useMobileEnhancementsStore((s) => s.syncedLyrics);
   const dominantColor = useMobileEnhancementsStore((s) => s.dominantColor);
   const setNowPlayingOpen = useMobileEnhancementsStore(
@@ -35,6 +38,7 @@ export const LiveLyricTicker: FC<LiveLyricTickerProps> = ({ variant }) => {
   if (
     !floatingLyricsEnabled ||
     !currentItem ||
+    lyricsTrackItemId !== currentItem.id ||
     syncedLyrics.length === 0 ||
     (variant === 'mobile' && nowPlayingOpen)
   ) {
