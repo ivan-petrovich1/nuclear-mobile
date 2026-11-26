@@ -17,6 +17,7 @@ export class PlaybackManager {
   private pendingAdvance = false;
   private lastFinishedItemId: string | null = null;
   private lastFinishedAt = 0;
+  private prematureEofRetriedItemId: string | null = null;
 
   beginTrackLoad = (): void => {
     this.pauseRequested = false;
@@ -124,6 +125,22 @@ export class PlaybackManager {
     }
     this.lastFinishedItemId = item.id;
     this.lastFinishedAt = now;
+
+    const { duration, seek } = useSoundStore.getState();
+    if (
+      duration > 30 &&
+      seek > 0 &&
+      seek < duration - 15 &&
+      this.prematureEofRetriedItemId !== item.id
+    ) {
+      this.prematureEofRetriedItemId = item.id;
+      this.mountedItemId = null;
+      useSoundStore.getState().setSrc(null);
+      useQueueStore
+        .getState()
+        .updateItemState(item.id, { status: 'idle', error: undefined });
+      return;
+    }
 
     eventBus.emit('trackFinished', item.track);
 

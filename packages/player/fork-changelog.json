@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-11-27T01:58",
+    "description": "v1.1.0 - Added inline Add songs panel inside playlists, fixed mobile Add to playlist submenu overflow, synced Stream Verification state across views, capped MSE StallDetector nudges, and added premature stream EOF recovery instead of skipping tracks.",
+    "type": "fix",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.1.0", "color": "purple" },
+      { "label": "All Ports", "color": "green" }
+    ]
+  },
+  {
     "date": "2026-11-26T02:05",
     "description": "v1.0.9 - Fixed multiple songs playing simultaneously and ghost playback while paused (<audio> unmount teardown, DSP AudioContext cleanup, cancelled stale play promises, and pause-during-load/recovery guards), fixed random segment/song skipping, Cyrillic offline download collisions, stream switching and greyed-out verification, yt-dlp yt:/base64url URLs, YouTube 403 proxy UA/expiry checks, pooled HTTP requests, duplicate finished-track skips, P2P polling backoff, LRCLIB 429/5xx cooldown, and startup updater/plugin/log spam; added Custom Picture Theme & Background (requested by milana) and opt-outable anonymous install/usage counter.",
     "type": "fix",

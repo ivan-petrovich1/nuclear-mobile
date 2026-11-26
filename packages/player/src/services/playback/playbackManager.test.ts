@@ -136,4 +136,34 @@ describe('PlaybackManager.finishTrack safeguards', () => {
     manager.startTrack(item, DUMMY_SOURCE, { autoPlay: true });
     expect(useSoundStore.getState().status).toBe('paused');
   });
+
+  it('recovers once on premature mid-track EOF instead of skipping, then advances if it ends again', () => {
+    const manager = new PlaybackManager();
+    const a = createQueueItem('Premature EOF Track');
+    const b = createQueueItem('Next Track');
+    useQueueStore.getState().addToQueue([a.track, b.track]);
+
+    const items = useQueueStore.getState().items;
+    manager.startTrack(items[0], DUMMY_SOURCE, { autoPlay: true });
+    useSoundStore.setState({ duration: 200, seek: 60 });
+
+    const finishedSpy = vi.fn();
+    const unsub = eventBus.on('trackFinished', finishedSpy);
+    try {
+      manager.finishTrack();
+      expect(finishedSpy).not.toHaveBeenCalled();
+      expect(useSoundStore.getState().src).toBeNull();
+      expect(useQueueStore.getState().getCurrentItem()?.id).toBe(items[0].id);
+      expect(useQueueStore.getState().getCurrentItem()?.status).toBe('idle');
+      expect(useQueueStore.getState().getCurrentItem()?.error).toBeUndefined();
+
+      manager.startTrack(items[0], DUMMY_SOURCE, { autoPlay: true });
+      vi.advanceTimersByTime(1100);
+      manager.finishTrack();
+      expect(finishedSpy).toHaveBeenCalledTimes(1);
+      expect(useQueueStore.getState().getCurrentItem()?.id).toBe(items[1].id);
+    } finally {
+      unsub();
+    }
+  });
 });
