@@ -42,8 +42,7 @@ type ContextMenuButtonProps = {
 const isMobileEnv = () =>
   typeof window !== 'undefined' &&
   (window.innerWidth < 768 ||
-    (typeof navigator !== 'undefined' &&
-      /Android/i.test(navigator.userAgent)));
+    (typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent)));
 
 const ContextMenuButton = forwardRef<HTMLElement, ContextMenuButtonProps>(
   function ContextMenuButton({ label, ...props }, ref) {

@@ -23,7 +23,7 @@ exports[`Plugins view > (Snapshot) renders the plugins view 1`] = `
   >
     <div
       animate="[object Object]"
-      class="border-border surface-background shadow-shadow rounded-md border-(length:--border-width) wrap-anywhere backdrop-blur-xl narrow:inset-0 narrow:rounded-none narrow:border-0 [html[data-android='true']_&]:top-[max(1.75rem,env(safe-area-inset-top))] [html[data-android='true']_&]:bottom-[max(3.25rem,env(safe-area-inset-bottom))] fixed inset-8 flex w-auto max-w-none flex-col p-0 md:flex-row"
+      class="border-border surface-background shadow-shadow rounded-md border-(length:--border-width) wrap-anywhere backdrop-blur-xl narrow:inset-0 narrow:rounded-none narrow:border-0 fixed inset-8 flex w-auto max-w-none flex-col p-0 md:flex-row [html[data-android='true']_&]:top-[max(1.75rem,env(safe-area-inset-top))] [html[data-android='true']_&]:bottom-[max(3.25rem,env(safe-area-inset-bottom))]"
       exit="[object Object]"
       initial="[object Object]"
       transition="[object Object]"

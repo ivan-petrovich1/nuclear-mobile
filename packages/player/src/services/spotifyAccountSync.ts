@@ -160,9 +160,7 @@ export const useSpotifyAccountSyncStore = create<SpotifySyncState>()(
         const userId = extractSpotifyUserId(get().accountInput);
         if (!userId) {
           if (!silent) {
-            toast.error(
-              'Enter a public Spotify profile URL or username first',
-            );
+            toast.error('Enter a public Spotify profile URL or username first');
           }
           return;
         }
@@ -245,20 +243,18 @@ export const useSpotifyAccountSyncStore = create<SpotifySyncState>()(
                 }));
                 updatedCount++;
               } else {
-                const newId = await usePlaylistStore
-                  .getState()
-                  .importPlaylist({
-                    id: uuidv4(),
-                    name: parsed.name,
-                    description: `Synced from Spotify (@${userId})`,
-                    artwork: parsed.coverUrl
-                      ? { items: [{ url: parsed.coverUrl, purpose: 'cover' }] }
-                      : undefined,
-                    createdAtIso: now,
-                    lastModifiedIso: now,
-                    isReadOnly: false,
-                    items,
-                  });
+                const newId = await usePlaylistStore.getState().importPlaylist({
+                  id: uuidv4(),
+                  name: parsed.name,
+                  description: `Synced from Spotify (@${userId})`,
+                  artwork: parsed.coverUrl
+                    ? { items: [{ url: parsed.coverUrl, purpose: 'cover' }] }
+                    : undefined,
+                  createdAtIso: now,
+                  lastModifiedIso: now,
+                  isReadOnly: false,
+                  items,
+                });
                 nextMap[spId] = newId;
                 createdCount++;
               }

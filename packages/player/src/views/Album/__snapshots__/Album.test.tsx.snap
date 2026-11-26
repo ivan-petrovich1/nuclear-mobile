@@ -12,7 +12,7 @@ exports[`Album view > (Snapshot) renders the album view 1`] = `
     />
     <div>
       <header
-        class="surface-topbar border-border grid h-12 w-full min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)_auto] md:grid-cols-[1fr_4fr_1fr] items-center gap-2 border-b-(length:--border-width) px-2 md:px-3 select-none"
+        class="surface-topbar border-border grid h-12 w-full max-w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b-(length:--border-width) px-2 select-none md:grid-cols-[1fr_4fr_1fr] md:px-3"
         data-tauri-drag-region="true"
       >
         <div
@@ -381,7 +381,7 @@ exports[`Album view > (Snapshot) renders the album view 1`] = `
       </header>
     </div>
     <div
-      class="surface-muted relative grid h-full min-h-0 min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)_auto] overflow-x-hidden"
+      class="surface-muted relative grid h-full min-h-0 max-w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] overflow-x-hidden"
     >
       <div
         animate="[object Object]"
@@ -980,7 +980,7 @@ exports[`Album view > (Snapshot) renders the album view 1`] = `
         />
       </div>
       <main
-        class="surface-muted min-w-0 max-w-full overflow-x-hidden overflow-y-auto"
+        class="surface-muted max-w-full min-w-0 overflow-x-hidden overflow-y-auto"
         data-testid="player-workspace-main"
       >
         <div
