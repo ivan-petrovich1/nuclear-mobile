@@ -9,6 +9,9 @@ import type { PlaylistItem } from '@nuclearplayer/model';
 import { PlayerBarWrapper } from '../../integration-tests/PlayerBar.test-wrapper';
 import { QueueWrapper } from '../../integration-tests/Queue.test-wrapper';
 import { providersHost } from '../../services/providersHost';
+import { useDownloadStore } from '../../stores/downloadStore';
+import { useFavoritesStore } from '../../stores/favoritesStore';
+import { usePlaylistStore } from '../../stores/playlistStore';
 import { useQueueStore } from '../../stores/queue/queueStore';
 import { useStartupStore } from '../../stores/startupStore';
 import { MetadataProviderBuilder } from '../../test/builders/MetadataProviderBuilder';
@@ -56,11 +59,14 @@ describe('PlaylistDetail view', () => {
     mockUuid.reset();
     resetInMemoryTauriStore();
     useQueueStore.setState({ items: [], currentIndex: 0 });
+    useFavoritesStore.setState({ tracks: [], albums: [], artists: [] });
+    useDownloadStore.setState({ items: {}, downloadingKeys: {} });
     useStartupStore.setState({ isStartingUp: false });
     providersHost.clear();
     PlaylistDetailWrapper.seedPlaylist(defaultPlaylist());
     (dialog.save as Mock).mockResolvedValue(null);
     toastError.mockClear();
+    toastSuccess.mockClear();
   });
 
   it('(Snapshot) renders playlist detail with tracks', async () => {
@@ -440,6 +446,152 @@ describe('PlaylistDetail view', () => {
           description: 'Dialog unavailable',
         });
       });
+    });
+  });
+
+  describe('Add songs area inside playlist', () => {
+    it('renders the Add songs panel for editable playlists and hides it for read-only playlists', async () => {
+      await PlaylistDetailWrapper.mount('test-playlist');
+      expect(
+        screen.getByTestId('playlist-add-songs-panel'),
+      ).toBeInTheDocument();
+
+      PlaylistDetailWrapper.seedPlaylist(
+        new PlaylistBuilder()
+          .withId('readonly-playlist')
+          .withName('Read-Only')
+          .readOnly()
+          .withOrigin({ provider: 'example-music', id: 'ext-1' })
+          .withTrackNames(['Track A']),
+      );
+      await PlaylistDetailWrapper.mount('readonly-playlist');
+      expect(
+        screen.queryByTestId('playlist-add-songs-panel'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('searches via MetadataProvider and adds a track into the playlist', async () => {
+      const searchMock = vi.fn(async () => ({
+        tracks: [
+          {
+            title: 'Round Midnight',
+            artists: [
+              {
+                name: 'Thelonious Monk',
+                roles: ['primary'],
+                source: { provider: 'test-meta', id: 'artist-monk' },
+              },
+            ],
+            durationMs: 192000,
+            source: { provider: 'test-meta', id: 'track-monk-1' },
+          },
+        ],
+      }));
+      providersHost.register(
+        new MetadataProviderBuilder()
+          .withId('test-meta')
+          .withSearchCapabilities(['unified', 'tracks'])
+          .withSearch(searchMock)
+          .build(),
+      );
+
+      await PlaylistDetailWrapper.mount('test-playlist');
+
+      const input = screen.getByTestId('playlist-add-songs-input');
+      await userEvent.type(input, 'Round Midnight{Enter}');
+
+      const resultRow = await screen.findByTestId('playlist-add-song-result');
+      expect(resultRow).toHaveTextContent('Round Midnight');
+      expect(resultRow).toHaveTextContent('Thelonious Monk');
+
+      const addBtn = screen.getByTestId('playlist-add-song-button');
+      expect(addBtn).toHaveTextContent('Add');
+      await userEvent.click(addBtn);
+
+      await waitFor(() => {
+        const updated = usePlaylistStore
+          .getState()
+          .playlists.get('test-playlist');
+        expect(updated?.items).toHaveLength(3);
+        expect(updated?.items[2]?.track.title).toBe('Round Midnight');
+      });
+
+      expect(screen.getByTestId('playlist-add-song-button')).toHaveTextContent(
+        'Added',
+      );
+      expect(screen.getByTestId('playlist-add-song-button')).toBeDisabled();
+      expect(toastSuccess).toHaveBeenCalled();
+    });
+
+    it('lets the user pick a liked song to populate an empty playlist', async () => {
+      PlaylistDetailWrapper.seedPlaylist(
+        new PlaylistBuilder()
+          .withId('empty-playlist')
+          .withName('Empty Playlist'),
+      );
+      useFavoritesStore.setState({
+        tracks: [
+          {
+            addedAtIso: new Date().toISOString(),
+            ref: {
+              title: 'Blue in Green',
+              artists: [
+                {
+                  name: 'Miles Davis',
+                  roles: ['primary'],
+                  source: { provider: 'test', id: 'miles' },
+                },
+              ],
+              durationMs: 327000,
+              source: { provider: 'test', id: 'blue-in-green' },
+            },
+          },
+        ],
+      });
+
+      await PlaylistDetailWrapper.mount('empty-playlist');
+      expect(PlaylistDetailWrapper.emptyState).toBeInTheDocument();
+
+      await userEvent.click(screen.getByTestId('playlist-add-songs-tab-liked'));
+
+      const resultRow = await screen.findByTestId('playlist-add-song-result');
+      expect(resultRow).toHaveTextContent('Blue in Green');
+
+      await userEvent.click(screen.getByTestId('playlist-add-song-button'));
+
+      await waitFor(() => {
+        expect(PlaylistDetailWrapper.trackTable).toHaveTextContent(
+          'Blue in Green',
+        );
+        expect(PlaylistDetailWrapper.emptyState).not.toBeInTheDocument();
+      });
+    });
+
+    it('falls back to streaming provider search when no metadata provider is registered', async () => {
+      const streamingSearch = vi.fn(async () => [
+        {
+          id: 'yt-fallback-1',
+          title: 'Daft Punk - Digital Love',
+          durationMs: 298000,
+          failed: false,
+          source: { provider: 'youtube', id: 'yt-fallback-1' },
+        },
+      ]);
+      providersHost.register(
+        new StreamingProviderBuilder()
+          .withSearchForTrack(streamingSearch)
+          .build(),
+      );
+
+      await PlaylistDetailWrapper.mount('test-playlist');
+
+      const input = screen.getByTestId('playlist-add-songs-input');
+      await userEvent.type(input, 'Digital Love{Enter}');
+
+      const resultRow = await screen.findByTestId('playlist-add-song-result');
+      expect(resultRow).toHaveTextContent('Digital Love');
+      expect(resultRow).toHaveTextContent('Daft Punk');
+      expect(streamingSearch).toHaveBeenCalledWith('', 'Digital Love');
     });
   });
 });

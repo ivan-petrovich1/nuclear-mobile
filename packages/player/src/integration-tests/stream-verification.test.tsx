@@ -1,7 +1,9 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { act } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 import { streamVerificationApi } from '../apis/streamVerificationApi';
+import { ConnectedStreamVerification } from '../components/ConnectedStreamVerification';
 import { providersHost } from '../services/providersHost';
 import { useQueueStore } from '../stores/queue/queueStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -529,6 +531,66 @@ describe('Stream verification', () => {
       expect(openUrl).toHaveBeenCalledWith(
         'https://docs.nuclearplayer.com/nuclear/core-concepts/stream-verification',
       );
+    });
+  });
+
+  describe('multiple instances sync', () => {
+    it('keeps multiple mounted ConnectedStreamVerification instances synchronized on verify and unverify', async () => {
+      const user = userEvent.setup();
+      FetchMock.getError('/mappings/top', 404);
+      FetchMock.get('/mappings', {});
+      useQueueStore.setState({
+        items: [
+          {
+            id: 'sync-item-1',
+            status: 'success',
+            retryCount: 0,
+            track: {
+              ...TRACK_WITH_CANDIDATES.track,
+              streamCandidates: [
+                {
+                  ...CANDIDATES[0],
+                  stream: createMockStream(CANDIDATES[0].id),
+                  lastResolvedAtIso: new Date().toISOString(),
+                },
+              ],
+            },
+          },
+        ],
+        currentIndex: 0,
+      });
+
+      render(
+        <div>
+          <ConnectedStreamVerification />
+          <ConnectedStreamVerification />
+        </div>,
+      );
+
+      const initialVerifyButtons = await screen.findAllByRole('button', {
+        name: 'Verify',
+      });
+      expect(initialVerifyButtons).toHaveLength(2);
+
+      // Verify from the first instance -> both instances update to Verified by you
+      await user.click(initialVerifyButtons[0]);
+
+      const verifiedStatuses = await screen.findAllByText('Verified by you');
+      expect(verifiedStatuses).toHaveLength(2);
+      const unverifyButtons = await screen.findAllByRole('button', {
+        name: 'Unverify',
+      });
+      expect(unverifyButtons).toHaveLength(2);
+
+      // Unverify from the second instance -> both instances revert to Unverified
+      await user.click(unverifyButtons[1]);
+
+      const unverifiedStatuses = await screen.findAllByText('Unverified');
+      expect(unverifiedStatuses).toHaveLength(2);
+      const revertedVerifyButtons = await screen.findAllByRole('button', {
+        name: 'Verify',
+      });
+      expect(revertedVerifyButtons).toHaveLength(2);
     });
   });
 });

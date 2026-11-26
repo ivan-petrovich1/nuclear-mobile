@@ -1,5 +1,6 @@
 const STALL_THRESHOLD_SECONDS = 1;
 const STALL_SKIP_SECONDS = 0.1;
+const MAX_CONSECUTIVE_NUDGES = 2;
 const RANGE_START_TOLERANCE_SECONDS = 0.1;
 const RANGE_END_EXCLUSION_SECONDS = 0.5;
 const MILLISECONDS_PER_SECOND = 1000;
@@ -9,6 +10,8 @@ export class StallDetector {
   private lastShouldBeMakingProgress = false;
   private lastUpdateMs = 0;
   private didNudge = false;
+  private lastNudgedTo: number | null = null;
+  private consecutiveNudges = 0;
 
   constructor(private readonly now: () => number = () => Date.now()) {}
 
@@ -21,6 +24,10 @@ export class StallDetector {
       shouldBeMakingProgress !== this.lastShouldBeMakingProgress;
 
     if (observedChange) {
+      if (value !== this.lastValue && value !== this.lastNudgedTo) {
+        this.consecutiveNudges = 0;
+        this.lastNudgedTo = null;
+      }
       this.lastValue = value;
       this.lastShouldBeMakingProgress = shouldBeMakingProgress;
       this.lastUpdateMs = this.now();
@@ -28,7 +35,11 @@ export class StallDetector {
       return false;
     }
 
-    if (!shouldBeMakingProgress || this.didNudge) {
+    if (
+      !shouldBeMakingProgress ||
+      this.didNudge ||
+      this.consecutiveNudges >= MAX_CONSECUTIVE_NUDGES
+    ) {
       return false;
     }
 
@@ -38,8 +49,11 @@ export class StallDetector {
       return false;
     }
 
+    const nextTime = value + STALL_SKIP_SECONDS;
     this.didNudge = true;
-    audio.currentTime = value + STALL_SKIP_SECONDS;
+    this.lastNudgedTo = nextTime;
+    this.consecutiveNudges += 1;
+    audio.currentTime = nextTime;
     return true;
   }
 

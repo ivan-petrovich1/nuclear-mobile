@@ -123,4 +123,51 @@ describe('TrackContextMenu', () => {
       expect(onClickB).not.toHaveBeenCalled();
     });
   });
+
+  describe('Submenu on mobile viewport', () => {
+    const originalInnerWidth = window.innerWidth;
+
+    afterEach(() => {
+      Object.defineProperty(window, 'innerWidth', {
+        value: originalInnerWidth,
+        configurable: true,
+      });
+    });
+
+    it('expands submenu inline inside the menu, toggles collapse, and calls onClick', async () => {
+      Object.defineProperty(window, 'innerWidth', {
+        value: 390,
+        configurable: true,
+      });
+
+      const onClickA = vi.fn();
+      Wrapper.mount({
+        title: 'Test Track',
+        subtitle: 'Artist',
+        submenu: {
+          label: 'More options',
+          items: [
+            { label: 'Option A', onClick: onClickA },
+            { label: 'Option B', onClick: vi.fn() },
+          ],
+        },
+      });
+
+      await Wrapper.open();
+      expect(Wrapper.submenu.panel).not.toBeInTheDocument();
+
+      await Wrapper.submenu.open();
+      expect(Wrapper.submenu.panel).toBeInTheDocument();
+      expect(screen.getByRole('menu')).toContainElement(Wrapper.submenu.panel);
+
+      // Tapping trigger again collapses it
+      await Wrapper.submenu.open();
+      expect(Wrapper.submenu.panel).not.toBeInTheDocument();
+
+      // Re-open and click an item
+      await Wrapper.submenu.open();
+      await Wrapper.submenu.item('Option A').click();
+      expect(onClickA).toHaveBeenCalledTimes(1);
+    });
+  });
 });

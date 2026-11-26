@@ -66,6 +66,25 @@ describe('StallDetector', () => {
     expect(audio.currentTime).toBe(6);
   });
 
+  it('caps consecutive nudges when playback stays frozen without real progress', () => {
+    const { detector, advanceClock } = createDetectorWithClock();
+    const audio = createMockAudio(10);
+    const buffered = midRangeBuffer();
+
+    detector.poll(audio, buffered);
+    advanceClock(STALL_WAIT_MS);
+    expect(detector.poll(audio, buffered)).toBe(true); // nudge #1 -> 10.1
+
+    detector.poll(audio, buffered); // observes 10.1
+    advanceClock(STALL_WAIT_MS);
+    expect(detector.poll(audio, buffered)).toBe(true); // nudge #2 -> 10.2
+
+    detector.poll(audio, buffered); // observes 10.2
+    advanceClock(STALL_WAIT_MS);
+    expect(detector.poll(audio, buffered)).toBe(false); // capped
+    expect(audio.currentTime).toBeCloseTo(10.2);
+  });
+
   it('does not nudge near the tail of a buffered range, deferring to gap jumping', () => {
     const { detector, advanceClock } = createDetectorWithClock();
     const audio = createMockAudio(39.8);

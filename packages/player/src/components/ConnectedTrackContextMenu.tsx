@@ -122,7 +122,11 @@ export const ConnectedTrackContextMenu: FC<ConnectedTrackContextMenuProps> = ({
             </TrackContextMenu.Submenu.Trigger>
             <TrackContextMenu.Submenu.Content>
               {playlistSubmenu.showFilter && (
-                <div onKeyDown={(event) => event.stopPropagation()}>
+                <div
+                  onKeyDown={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => event.stopPropagation()}
+                >
                   <Input
                     size="sm"
                     variant="borderless"

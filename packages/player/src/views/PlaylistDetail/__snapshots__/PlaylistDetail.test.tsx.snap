@@ -270,8 +270,222 @@ exports[`PlaylistDetail view > (Snapshot) renders playlist detail with tracks 1`
               </div>
             </div>
           </div>
+          <section
+            class="border-border surface-card shadow-shadow mx-3 mt-3 rounded-md border-(length:--border-width) p-3 md:mx-6 md:mt-4 md:p-4"
+            data-testid="playlist-add-songs-panel"
+          >
+            <div
+              class="flex flex-col gap-2.5"
+            >
+              <div
+                class="flex flex-wrap items-center justify-between gap-2"
+              >
+                <div
+                  class="flex items-center gap-1.5 text-sm font-bold"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="lucide lucide-plus"
+                    fill="none"
+                    height="16"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="16"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M5 12h14"
+                    />
+                    <path
+                      d="M12 5v14"
+                    />
+                  </svg>
+                  <span>
+                    Add songs
+                  </span>
+                </div>
+                <div
+                  class="flex flex-wrap items-center gap-1.5"
+                >
+                  <button
+                    class="border-border inline-flex cursor-pointer items-center gap-1 rounded-full border-(length:--border-width) px-2.5 py-1 text-xs font-semibold transition bg-primary text-primary-foreground"
+                    data-testid="playlist-add-songs-tab-search"
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      class="lucide lucide-search"
+                      fill="none"
+                      height="12"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                      width="12"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="m21 21-4.34-4.34"
+                      />
+                      <circle
+                        cx="11"
+                        cy="11"
+                        r="8"
+                      />
+                    </svg>
+                    <span>
+                      Search
+                    </span>
+                  </button>
+                  <button
+                    class="border-border inline-flex cursor-pointer items-center gap-1 rounded-full border-(length:--border-width) px-2.5 py-1 text-xs font-semibold transition bg-muted/50 hover:bg-muted"
+                    data-testid="playlist-add-songs-tab-liked"
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      class="lucide lucide-heart"
+                      fill="none"
+                      height="12"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                      width="12"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"
+                      />
+                    </svg>
+                    <span>
+                      Liked
+                    </span>
+                  </button>
+                  <button
+                    class="border-border inline-flex cursor-pointer items-center gap-1 rounded-full border-(length:--border-width) px-2.5 py-1 text-xs font-semibold transition bg-muted/50 hover:bg-muted"
+                    data-testid="playlist-add-songs-tab-downloaded"
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      class="lucide lucide-download"
+                      fill="none"
+                      height="12"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                      width="12"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M12 15V3"
+                      />
+                      <path
+                        d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+                      />
+                      <path
+                        d="m7 10 5 5 5-5"
+                      />
+                    </svg>
+                    <span>
+                      Downloaded
+                    </span>
+                  </button>
+                  <button
+                    class="border-border inline-flex cursor-pointer items-center gap-1 rounded-full border-(length:--border-width) px-2.5 py-1 text-xs font-semibold transition bg-muted/50 hover:bg-muted"
+                    data-testid="playlist-add-songs-tab-queue"
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      class="lucide lucide-list-music"
+                      fill="none"
+                      height="12"
+                      stroke="currentColor"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      viewBox="0 0 24 24"
+                      width="12"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M21 15V6"
+                      />
+                      <path
+                        d="M18.5 18a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"
+                      />
+                      <path
+                        d="M12 12H3"
+                      />
+                      <path
+                        d="M16 6H3"
+                      />
+                      <path
+                        d="M12 18H3"
+                      />
+                    </svg>
+                    <span>
+                      Queue
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <form
+                class="flex items-center gap-2"
+              >
+                <div
+                  class="relative min-w-0 flex-1"
+                >
+                  <svg
+                    aria-hidden="true"
+                    class="lucide lucide-search text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+                    fill="none"
+                    height="24"
+                    stroke="currentColor"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                    width="24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="m21 21-4.34-4.34"
+                    />
+                    <circle
+                      cx="11"
+                      cy="11"
+                      r="8"
+                    />
+                  </svg>
+                  <div
+                    class="flex w-full flex-col gap-2"
+                  >
+                    <input
+                      class="border-border focus-visible:ring-ring focus-visible:ring-offset-muted w-full px-3 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none surface-background text-foreground placeholder:text-foreground/60 h-9 text-sm rounded-md border-(length:--border-width) pl-8 pr-8"
+                      data-headlessui-state=""
+                      data-testid="playlist-add-songs-input"
+                      id="input-:r7:"
+                      placeholder="Search songs to add to this playlist..."
+                      type="text"
+                      value=""
+                    />
+                  </div>
+                </div>
+              </form>
+            </div>
+          </section>
           <div
-            class="h-full p-2.5 md:p-6"
+            class="min-h-[24rem] flex-1 p-2.5 md:p-6"
           >
             <div
               class="flex h-full flex-col"
@@ -291,7 +505,7 @@ exports[`PlaylistDetail view > (Snapshot) renders playlist detail with tracks 1`
                       <input
                         class="border-border focus-visible:ring-ring focus-visible:ring-offset-muted w-full px-3 transition-colors focus-visible:outline-none surface-input placeholder:text-input-foreground/60 h-9 text-sm rounded-l border-0 focus-visible:ring-0 focus-visible:ring-offset-0"
                         data-headlessui-state=""
-                        id="input-:r7:"
+                        id="input-:r9:"
                         placeholder="Filter tracks"
                         type="text"
                         value=""
@@ -593,7 +807,7 @@ exports[`PlaylistDetail view > (Snapshot) renders playlist detail with tracks 1`
                                 data-headlessui-state=""
                                 data-state="closed"
                                 data-testid="track-context-menu-button"
-                                id="radix-:ra:"
+                                id="radix-:rc:"
                                 type="button"
                               >
                                 <svg
@@ -798,7 +1012,7 @@ exports[`PlaylistDetail view > (Snapshot) renders playlist detail with tracks 1`
                                 data-headlessui-state=""
                                 data-state="closed"
                                 data-testid="track-context-menu-button"
-                                id="radix-:rc:"
+                                id="radix-:re:"
                                 type="button"
                               >
                                 <svg

@@ -123,6 +123,25 @@
     "importJson": "Import from JSON",
     "exportJson": "Export as JSON",
     "add": "Add",
+    "addSongs": {
+      "title": "Add songs",
+      "searchPlaceholder": "Search songs to add to this playlist...",
+      "tabs": {
+        "search": "Search",
+        "liked": "Liked",
+        "downloaded": "Downloaded",
+        "queue": "Queue"
+      },
+      "add": "Add",
+      "added": "Added",
+      "addedToast": "Added \"{{title}}\" to playlist",
+      "searching": "Searching...",
+      "noResults": "No matching songs found",
+      "emptyTab": "No songs here yet",
+      "searchHint": "Type a song or artist name to search, or pick from Liked, Downloaded, or Queue",
+      "searchError": "Search failed. Try again.",
+      "close": "Hide"
+    },
     "delete": "Delete playlist",
     "deleteConfirm": "Are you sure you want to delete this playlist?",
     "play": "Play",

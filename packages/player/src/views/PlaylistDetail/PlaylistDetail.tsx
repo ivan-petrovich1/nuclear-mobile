@@ -7,6 +7,7 @@ import { EmptyState, ScrollableArea } from '@nuclearplayer/ui';
 
 import { ConnectedTrackTable } from '../../components/ConnectedTrackTable';
 import { PlaylistDetailHeader } from '../Playlists/components/PlaylistDetailHeader';
+import { PlaylistAddSongsPanel } from './components/PlaylistAddSongsPanel';
 import { PlaylistDetailActions } from './components/PlaylistDetailActions';
 import { usePlaylistDetail } from './usePlaylistDetail';
 import { usePlaylistEditing } from './usePlaylistEditing';
@@ -39,6 +40,12 @@ export const PlaylistDetail: FC = () => {
           />
         </PlaylistDetailHeader>
       )}
+      {editing.isEditable && (
+        <PlaylistAddSongsPanel
+          playlistId={playlistId}
+          existingTracks={tracks}
+        />
+      )}
       {isEmpty(tracks) ? (
         <EmptyState
           icon={<ListMusicIcon size={48} />}
@@ -47,7 +54,7 @@ export const PlaylistDetail: FC = () => {
           className="flex-1"
         />
       ) : (
-        <div className="h-full p-2.5 md:p-6">
+        <div className="min-h-[24rem] flex-1 p-2.5 md:p-6">
           <ConnectedTrackTable
             tracks={tracks}
             getItemId={editing.getItemId}
