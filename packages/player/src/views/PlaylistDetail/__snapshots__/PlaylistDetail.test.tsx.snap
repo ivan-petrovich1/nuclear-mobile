@@ -2,7 +2,7 @@
 
 exports[`PlaylistDetail view > (Snapshot) renders playlist detail with tracks 1`] = `
 <main
-  class="surface-muted min-w-0 max-w-full overflow-x-hidden overflow-y-auto"
+  class="surface-muted max-w-full min-w-0 overflow-x-hidden overflow-y-auto"
   data-testid="player-workspace-main"
 >
   <div
@@ -471,7 +471,7 @@ exports[`PlaylistDetail view > (Snapshot) renders playlist detail with tracks 1`
                     class="flex w-full flex-col gap-2"
                   >
                     <input
-                      class="border-border focus-visible:ring-ring focus-visible:ring-offset-muted w-full px-3 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none surface-background text-foreground placeholder:text-foreground/60 h-9 text-sm rounded-md border-(length:--border-width) pl-8 pr-8"
+                      class="border-border focus-visible:ring-ring focus-visible:ring-offset-muted w-full px-3 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none surface-background text-foreground placeholder:text-foreground/60 h-9 text-sm rounded-md border-(length:--border-width) pr-8 pl-8"
                       data-headlessui-state=""
                       data-testid="playlist-add-songs-input"
                       id="input-:r7:"

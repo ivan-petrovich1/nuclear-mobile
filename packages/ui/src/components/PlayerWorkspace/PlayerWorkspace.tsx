@@ -18,7 +18,10 @@ const PlayerWorkspaceMain: FC<MainProps> = ({ children, className = '' }) => {
   return (
     <main
       data-testid="player-workspace-main"
-      className={cn('surface-muted min-w-0 max-w-full overflow-x-hidden overflow-y-auto', className)}
+      className={cn(
+        'surface-muted max-w-full min-w-0 overflow-x-hidden overflow-y-auto',
+        className,
+      )}
     >
       {children}
     </main>
@@ -38,7 +41,7 @@ const PlayerWorkspaceImpl: FC<PlayerWorkspaceProps> = ({
   return (
     <div
       className={cn(
-        'surface-muted relative grid h-full min-h-0 min-w-0 max-w-full grid-cols-[auto_minmax(0,1fr)_auto] overflow-x-hidden',
+        'surface-muted relative grid h-full min-h-0 max-w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] overflow-x-hidden',
         className,
       )}
     >

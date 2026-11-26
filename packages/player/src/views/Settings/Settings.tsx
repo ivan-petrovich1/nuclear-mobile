@@ -22,7 +22,7 @@ export const Settings = () => {
           className="w-full max-w-[696px] flex-1 overflow-hidden md:min-w-[300px]"
           viewportRef={viewportRef}
         >
-          <div className="px-2 pb-10 break-words [overflow-wrap:anywhere]">
+          <div className="px-2 pb-10 [overflow-wrap:anywhere] break-words">
             {groups.map((group, index) => (
               <Fragment key={group.name}>
                 {index > 0 && <hr className="border-foreground/10 my-10" />}

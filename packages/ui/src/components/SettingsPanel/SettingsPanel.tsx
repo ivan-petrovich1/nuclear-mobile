@@ -36,7 +36,7 @@ export const SettingsPanel: FC<SettingsPanelProps> = ({
   <DialogRoot
     isOpen={isOpen}
     onClose={onClose}
-    className="narrow:inset-0 narrow:rounded-none narrow:border-0 [html[data-android='true']_&]:top-[max(1.75rem,env(safe-area-inset-top))] [html[data-android='true']_&]:bottom-[max(3.25rem,env(safe-area-inset-bottom))] fixed inset-8 flex w-auto max-w-none flex-col p-0 md:flex-row"
+    className="narrow:inset-0 narrow:rounded-none narrow:border-0 fixed inset-8 flex w-auto max-w-none flex-col p-0 md:flex-row [html[data-android='true']_&]:top-[max(1.75rem,env(safe-area-inset-top))] [html[data-android='true']_&]:bottom-[max(3.25rem,env(safe-area-inset-bottom))]"
   >
     <SettingsPanelNavigation sections={sections} footer={navigationFooter} />
     <SettingsPanelContent>{children}</SettingsPanelContent>

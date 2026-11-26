@@ -317,7 +317,7 @@ export const P2pSyncPanel: FC = () => {
               haptic('medium');
               void sendHandoffToPeer();
             }}
-            className="border-border bg-black/25 flex items-center justify-center gap-1.5 rounded-lg border py-2.5 text-xs font-extrabold transition active:scale-95"
+            className="border-border flex items-center justify-center gap-1.5 rounded-lg border bg-black/25 py-2.5 text-xs font-extrabold transition active:scale-95"
           >
             <Send size={14} />
             <span>Handoff Song</span>

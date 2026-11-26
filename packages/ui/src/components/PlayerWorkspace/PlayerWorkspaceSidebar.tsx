@@ -49,7 +49,12 @@ export const PlayerWorkspaceSidebar: FC<PlayerWorkspaceSidebarProps> = ({
       (typeof navigator !== 'undefined' &&
         /Android/i.test(navigator.userAgent)));
   if (isMobile && isCollapsed) {
-    return <div data-testid={`sidebar-${side}`} className="w-0 shrink-0 overflow-hidden" />;
+    return (
+      <div
+        data-testid={`sidebar-${side}`}
+        className="w-0 shrink-0 overflow-hidden"
+      />
+    );
   }
   const currentWidth = isCollapsed
     ? SIDEBAR_CONFIG.COLLAPSED_WIDTH

@@ -71,9 +71,7 @@
     "type": "improvement",
     "author": "ivan",
     "contributors": ["ivan"],
-    "tags": [
-      { "label": "Safeguards", "color": "orange" }
-    ]
+    "tags": [{ "label": "Safeguards", "color": "orange" }]
   },
   {
     "date": "2026-11-24T23:55",

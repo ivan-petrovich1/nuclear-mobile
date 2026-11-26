@@ -185,7 +185,14 @@ export const shareTrackVibeCard = async (opts: {
   ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
   for (let i = 0; i < barCount; i++) {
     const h = 16 + Math.abs(Math.sin(i * 0.65 + 1.2)) * 44;
-    drawRoundedRect(ctx, startX + i * (barW + barGap), waveY - h / 2, barW, h, 5);
+    drawRoundedRect(
+      ctx,
+      startX + i * (barW + barGap),
+      waveY - h / 2,
+      barW,
+      h,
+      5,
+    );
     ctx.fill();
   }
 
