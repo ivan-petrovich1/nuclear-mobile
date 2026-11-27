@@ -351,6 +351,24 @@ const parseLrc = (lrc: string): LrcLine[] => {
   return lines.sort((a, b) => a.timeSec - b.timeSec);
 };
 
+const rgbToHex = (r: number, g: number, b: number): string => {
+  const clamp = (value: number) =>
+    Math.max(0, Math.min(255, Math.round(value)))
+      .toString(16)
+      .padStart(2, '0');
+  return `#${clamp(r)}${clamp(g)}${clamp(b)}`;
+};
+
+const hslToHex = (h: number, s: number, l: number): string => {
+  const sat = s / 100;
+  const light = l / 100;
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = sat * Math.min(light, 1 - light);
+  const f = (n: number) =>
+    light - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return rgbToHex(255 * f(0), 255 * f(8), 255 * f(4));
+};
+
 const extractColorFromTrack = (track: Track): Promise<string> => {
   return new Promise((resolve) => {
     const url =
@@ -364,7 +382,7 @@ const extractColorFromTrack = (track: Track): Promise<string> => {
         hash = str.charCodeAt(i) + ((hash << 5) - hash);
       }
       const hue = Math.abs(hash) % 360;
-      resolve(`hsl(${hue}, 72%, 48%)`);
+      resolve(hslToHex(hue, 72, 48));
     };
 
     if (!url) {
@@ -406,7 +424,7 @@ const extractColorFromTrack = (track: Track): Promise<string> => {
           const r = Math.round(rSum / count);
           const g = Math.round(gSum / count);
           const b = Math.round(bSum / count);
-          resolve(`rgb(${r}, ${g}, ${b})`);
+          resolve(rgbToHex(r, g, b));
           return;
         }
       } catch {
@@ -982,7 +1000,14 @@ const syncAudioElementDsp = () => {
         masterVolumeGain.gain.setTargetAtTime(targetVol, ctx.currentTime, 0.02);
       };
       syncVol();
+      const onAudioPlay = () => {
+        if (ctx.state !== 'running') {
+          void ctx.resume().catch(() => {});
+        }
+      };
       audio.addEventListener('volumechange', syncVol);
+      audio.addEventListener('play', onAudioPlay);
+      audio.addEventListener('playing', onAudioPlay);
 
       let panner: StereoPannerNode | null = null;
       let lfo: OscillatorNode | null = null;
@@ -1053,13 +1078,19 @@ const syncAudioElementDsp = () => {
         normalGain,
         karaokeGain,
         analyser,
-        cleanupListeners: () =>
-          audio.removeEventListener('volumechange', syncVol),
+        cleanupListeners: () => {
+          audio.removeEventListener('volumechange', syncVol);
+          audio.removeEventListener('play', onAudioPlay);
+          audio.removeEventListener('playing', onAudioPlay);
+        },
       };
       dspGraphs.set(audio, graph);
       activeDspAudio = audio;
       activeDspGraph = graph;
       activeAnalyser = analyser;
+      if (ctx.state !== 'running') {
+        void ctx.resume().catch(() => {});
+      }
     } catch {
       // Ignore if element already attached to another AudioContext
     }
@@ -1067,8 +1098,8 @@ const syncAudioElementDsp = () => {
 
   if (graph) {
     activeAnalyser = graph.analyser;
-    if (graph.ctx.state === 'suspended' && !audio.paused) {
-      void graph.ctx.resume();
+    if (graph.ctx.state !== 'running' && !audio.paused) {
+      void graph.ctx.resume().catch(() => {});
     }
     graph.bassFilter.gain.value = bassBoostDb;
     graph.eqFilters.forEach((filter, idx) => {
@@ -1159,6 +1190,26 @@ export const initMobileEnhancements = () => {
 
   initAndroidMediaBridge();
   initP2pSync();
+
+  if (typeof window !== 'undefined') {
+    const resumeDspOnGesture = () => {
+      if (activeDspGraph && activeDspGraph.ctx.state !== 'running') {
+        void activeDspGraph.ctx.resume().catch(() => {});
+      }
+    };
+    window.addEventListener('pointerdown', resumeDspOnGesture, {
+      passive: true,
+      capture: true,
+    });
+    window.addEventListener('keydown', resumeDspOnGesture, {
+      passive: true,
+      capture: true,
+    });
+    window.addEventListener('touchstart', resumeDspOnGesture, {
+      passive: true,
+      capture: true,
+    });
+  }
 
   // Wire native Android Shake-to-Skip callback
   if (typeof window !== 'undefined') {

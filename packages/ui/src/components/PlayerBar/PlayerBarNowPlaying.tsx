@@ -2,6 +2,7 @@ import { Music2 } from 'lucide-react';
 import { FC, ReactNode } from 'react';
 
 import { cn } from '../../utils';
+import { MarqueeText } from '../MarqueeText';
 
 type PlayerBarNowPlayingProps = {
   title: string;
@@ -41,15 +42,15 @@ export const PlayerBarNowPlaying: FC<PlayerBarNowPlayingProps> = ({
       )}
     </div>
     <div className="min-w-0 flex-1">
-      <div
-        className={cn('truncate text-sm font-bold', {
+      <MarqueeText
+        className={cn('text-sm font-bold', {
           'cursor-pointer hover:underline': onTitleClick,
         })}
         data-testid="now-playing-title"
         onClick={onTitleClick}
       >
         {title}
-      </div>
+      </MarqueeText>
       <div
         className={cn('truncate text-xs opacity-70', {
           'cursor-pointer hover:underline': onArtistClick,

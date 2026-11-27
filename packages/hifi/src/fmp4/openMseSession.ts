@@ -91,7 +91,12 @@ export const openMseSession = async (
   }
 
   const mimeType = `audio/mp4; codecs="${options.codec ?? 'mp4a.40.2'}"`;
-  const sourceBuffer = mediaSource.addSourceBuffer(mimeType);
+  let sourceBuffer: SourceBuffer;
+  try {
+    sourceBuffer = mediaSource.addSourceBuffer(mimeType);
+  } catch {
+    throw new SoundError('unsupportedFormat');
+  }
   const bufferQueue = new BufferOperationQueue(sourceBuffer);
   mediaSource.duration = timeline.durationSeconds;
 

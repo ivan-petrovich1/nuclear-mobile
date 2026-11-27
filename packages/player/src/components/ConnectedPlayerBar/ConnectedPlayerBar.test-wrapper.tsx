@@ -131,7 +131,14 @@ export const ConnectedPlayerBarWrapper = {
   },
 
   setPlaybackPosition(seconds: number) {
-    useSoundStore.setState({ seek: seconds, status: 'paused' });
+    useSoundStore.setState({
+      seek: seconds,
+      status: 'paused',
+      src: useSoundStore.getState().src ?? {
+        url: '/track.mp3',
+        protocol: 'http',
+      },
+    });
   },
 
   get playbackPosition() {

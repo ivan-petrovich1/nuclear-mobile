@@ -261,35 +261,58 @@ describe('Stream Resolution Integration', () => {
 
   describe('when stream is fMP4 (YouTube)', () => {
     it('produces MSE protocol with durationSeconds for m4a container', async () => {
-      setupMetadataProvider();
+      const originalFetch = globalThis.fetch;
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockImplementation((input, init) => {
+          const url = typeof input === 'string' ? input : input.toString();
+          if (url.startsWith('http://127.0.0.1:9100/stream/')) {
+            return new Promise<Response>((_resolve, reject) => {
+              const abort = () =>
+                reject(new DOMException('Aborted', 'AbortError'));
+              if (init?.signal?.aborted) {
+                abort();
+                return;
+              }
+              init?.signal?.addEventListener('abort', abort, { once: true });
+            });
+          }
+          return originalFetch(input, init);
+        });
 
-      const streamingProvider = new StreamingProviderBuilder()
-        .withSearchForTrack(async (artist, title) => [
-          createMockCandidate('yt-1', `${artist} - ${title}`, {
-            durationMs: 180000,
-          }),
-        ])
-        .withGetStreamUrl(async (candidateId) =>
-          createMockStream(candidateId, {
-            container: 'm4a',
-            mimeType: 'audio/mp4',
-            durationMs: 180000,
-            url: 'https://rr1---sn-abc.googlevideo.com/videoplayback?id=123',
-          }),
-        )
-        .build();
+      try {
+        setupMetadataProvider();
 
-      providersHost.register(streamingProvider);
+        const streamingProvider = new StreamingProviderBuilder()
+          .withSearchForTrack(async (artist, title) => [
+            createMockCandidate('yt-1', `${artist} - ${title}`, {
+              durationMs: 180000,
+            }),
+          ])
+          .withGetStreamUrl(async (candidateId) =>
+            createMockStream(candidateId, {
+              container: 'm4a',
+              mimeType: 'audio/mp4',
+              durationMs: 180000,
+              url: 'https://rr1---sn-abc.googlevideo.com/videoplayback?id=123',
+            }),
+          )
+          .build();
 
-      await AlbumWrapper.mountDirectly();
-      await AlbumWrapper.addTrackToQueueByTitle('Countdown');
+        providersHost.register(streamingProvider);
 
-      await StreamResolutionWrapper.waitForPlayback();
+        await AlbumWrapper.mountDirectly();
+        await AlbumWrapper.addTrackToQueueByTitle('Countdown');
 
-      const src = StreamResolutionWrapper.getSoundState().src;
-      expect(src?.protocol).toBe('mse');
-      expect(src?.durationSeconds).toBe(180);
-      expect(src?.url).toContain('http://127.0.0.1:9100/stream/');
+        await StreamResolutionWrapper.waitForPlayback();
+
+        const src = StreamResolutionWrapper.getSoundState().src;
+        expect(src?.protocol).toBe('mse');
+        expect(src?.durationSeconds).toBe(180);
+        expect(src?.url).toContain('http://127.0.0.1:9100/stream/');
+      } finally {
+        fetchSpy.mockRestore();
+      }
     });
 
     it('falls back to regular protocol when no duration is available', async () => {
@@ -536,6 +559,63 @@ describe('Stream Resolution Integration', () => {
       const currentItem = StreamResolutionWrapper.getCurrentQueueItem();
       expect(currentItem?.track.title).toBe('Countdown');
       expect(currentItem?.status).toBe('success');
+    });
+
+    it('skips candidates with missing/empty stream.url and stops soundStore if all fail', async () => {
+      setupMetadataProvider();
+
+      const streamingProvider = new StreamingProviderBuilder()
+        .withSearchForTrack(async () => [
+          createMockCandidate('yt-empty-url', 'Empty URL'),
+          createMockCandidate('yt-valid', 'Valid Stream'),
+        ])
+        .withGetStreamUrl(async (candidateId) => {
+          if (candidateId === 'yt-empty-url') {
+            return {
+              url: '   ',
+              protocol: 'https',
+              source: { provider: 'youtube', id: 'yt-empty-url' },
+            };
+          }
+          return createMockStream(candidateId);
+        })
+        .build();
+
+      providersHost.register(streamingProvider);
+
+      await AlbumWrapper.mountDirectly();
+      await AlbumWrapper.addTrackToQueueByTitle('Countdown');
+
+      await StreamResolutionWrapper.waitForPlayback();
+
+      expect(StreamResolutionWrapper.getSoundState().src).toEqual({
+        url: 'http://127.0.0.1:9100/stream/aHR0cHM6Ly9leGFtcGxlLmNvbS95dC12YWxpZC5tcDM',
+        protocol: 'https',
+      });
+    });
+
+    it('stops soundStore cleanly when all candidates fail', async () => {
+      setupMetadataProvider();
+
+      const streamingProvider = new StreamingProviderBuilder()
+        .withSearchForTrack(async () => [
+          createMockCandidate('yt-fail-1', 'Fail 1'),
+        ])
+        .withGetStreamUrl(async () => {
+          throw new Error('Unavailable');
+        })
+        .build();
+
+      providersHost.register(streamingProvider);
+
+      await AlbumWrapper.mountDirectly();
+      await AlbumWrapper.addTrackToQueueByTitle('Countdown');
+
+      await StreamResolutionWrapper.waitForError();
+
+      const soundState = StreamResolutionWrapper.getSoundState();
+      expect(soundState.status).toBe('stopped');
+      expect(soundState.src).toBeNull();
     });
   });
 });

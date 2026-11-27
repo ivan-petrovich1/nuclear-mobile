@@ -23,20 +23,50 @@ export class PlaybackManager {
     this.pauseRequested = false;
   };
 
+  hasPendingPlayRequest = (): boolean => this.playRequested;
+
+  clearPendingPlayback = (itemId?: string): void => {
+    this.playRequested = false;
+    this.pendingAdvance = false;
+    if (
+      !useSoundStore.getState().src &&
+      (!itemId || this.mountedItemId === itemId)
+    ) {
+      this.mountedItemId = null;
+    }
+  };
+
   play = (): void => {
     this.pendingAdvance = false;
     this.pauseRequested = false;
-    const { status } = useSoundStore.getState();
+    const { status, src } = useSoundStore.getState();
+    const item = useQueueStore.getState().getCurrentItem();
+
     if (status === 'playing') {
-      return;
-    }
-    if (status === 'paused') {
-      useSoundStore.getState().play();
-      return;
+      if (src) {
+        return;
+      }
+      useSoundStore.getState().stop();
     }
 
-    const item = useQueueStore.getState().getCurrentItem();
+    if (status === 'paused') {
+      if (
+        src &&
+        (this.mountedItemId === null || !item || this.mountedItemId === item.id)
+      ) {
+        useSoundStore.getState().play();
+        return;
+      }
+    }
+
     if (!item) {
+      return;
+    }
+    if (!src) {
+      this.playRequested = true;
+      if (item.status === 'error') {
+        eventBus.emit('streamSourceInvalid', item.track);
+      }
       return;
     }
     if (this.mountedItemId !== item.id) {
@@ -135,10 +165,8 @@ export class PlaybackManager {
     ) {
       this.prematureEofRetriedItemId = item.id;
       this.mountedItemId = null;
-      useSoundStore.getState().setSrc(null);
-      useQueueStore
-        .getState()
-        .updateItemState(item.id, { status: 'idle', error: undefined });
+      this.playRequested = useSoundStore.getState().status === 'playing';
+      eventBus.emit('streamSourceInvalid', item.track);
       return;
     }
 
@@ -179,7 +207,28 @@ export class PlaybackManager {
   };
 
   sourceFailed = (message: string): void => {
+    const mountedId = this.mountedItemId;
+    const item = mountedId
+      ? useQueueStore.getState().getItemById(mountedId)
+      : undefined;
+    const candidates = item?.track.streamCandidates ?? [];
+    const wasPlaying = useSoundStore.getState().status === 'playing';
+
+    if (item && candidates.length > 1) {
+      this.mountedItemId = null;
+      this.playRequested = wasPlaying;
+      useSoundStore.getState().stop();
+      useSoundStore.getState().setSrc(null);
+      useQueueStore.getState().removeCandidate(item.id, candidates[0].id);
+      return;
+    }
+
+    this.playRequested = false;
+    this.pendingAdvance = false;
+    useSoundStore.getState().stop();
+    useSoundStore.getState().setSrc(null);
     this.updateMountedItem({ status: 'error', error: message });
+    this.mountedItemId = null;
   };
 
   private updateMountedItem(updates: Partial<QueueItem>): void {

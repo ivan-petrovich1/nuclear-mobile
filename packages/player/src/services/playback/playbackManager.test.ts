@@ -148,14 +148,15 @@ describe('PlaybackManager.finishTrack safeguards', () => {
     useSoundStore.setState({ duration: 200, seek: 60 });
 
     const finishedSpy = vi.fn();
-    const unsub = eventBus.on('trackFinished', finishedSpy);
+    const invalidSpy = vi.fn();
+    const unsubFinished = eventBus.on('trackFinished', finishedSpy);
+    const unsubInvalid = eventBus.on('streamSourceInvalid', invalidSpy);
     try {
       manager.finishTrack();
       expect(finishedSpy).not.toHaveBeenCalled();
-      expect(useSoundStore.getState().src).toBeNull();
+      expect(invalidSpy).toHaveBeenCalledTimes(1);
+      expect(manager.hasPendingPlayRequest()).toBe(true);
       expect(useQueueStore.getState().getCurrentItem()?.id).toBe(items[0].id);
-      expect(useQueueStore.getState().getCurrentItem()?.status).toBe('idle');
-      expect(useQueueStore.getState().getCurrentItem()?.error).toBeUndefined();
 
       manager.startTrack(items[0], DUMMY_SOURCE, { autoPlay: true });
       vi.advanceTimersByTime(1100);
@@ -163,7 +164,84 @@ describe('PlaybackManager.finishTrack safeguards', () => {
       expect(finishedSpy).toHaveBeenCalledTimes(1);
       expect(useQueueStore.getState().getCurrentItem()?.id).toBe(items[1].id);
     } finally {
-      unsub();
+      unsubFinished();
+      unsubInvalid();
     }
+  });
+
+  it('does not enter playing state when soundStore.src is null (even from paused)', () => {
+    const manager = new PlaybackManager();
+    const a = createQueueItem('No Source Track');
+    useQueueStore.getState().addToQueue([a.track]);
+    useSoundStore.setState({ src: null, status: 'paused' });
+
+    manager.play();
+    expect(useSoundStore.getState().status).not.toBe('playing');
+    expect(manager.hasPendingPlayRequest()).toBe(true);
+  });
+
+  it('stops soundStore and clears src when sourceFailed has no fallback candidates', () => {
+    const manager = new PlaybackManager();
+    const a = createQueueItem('Failing Track');
+    useQueueStore.getState().addToQueue([a.track]);
+    const item = useQueueStore.getState().items[0];
+    useQueueStore.getState().updateItemState(item.id, {
+      track: {
+        ...item.track,
+        streamCandidates: [
+          {
+            id: 'only-cand',
+            title: 'Only Candidate',
+            failed: false,
+            source: { provider: 'youtube', id: 'only-cand' },
+          },
+        ],
+      },
+    });
+
+    manager.startTrack(item, DUMMY_SOURCE, { autoPlay: true });
+    expect(useSoundStore.getState().status).toBe('playing');
+
+    manager.sourceFailed('Playback error');
+    expect(useSoundStore.getState().status).toBe('stopped');
+    expect(useSoundStore.getState().src).toBeNull();
+    expect(useQueueStore.getState().getCurrentItem()?.status).toBe('error');
+  });
+
+  it('removes failed head candidate and stops dead src when fallback candidates exist', () => {
+    const manager = new PlaybackManager();
+    const a = createQueueItem('Fallback Track');
+    useQueueStore.getState().addToQueue([a.track]);
+    const item = useQueueStore.getState().items[0];
+    useQueueStore.getState().updateItemState(item.id, {
+      track: {
+        ...item.track,
+        streamCandidates: [
+          {
+            id: 'cand-1',
+            title: 'Bad Candidate',
+            failed: false,
+            source: { provider: 'youtube', id: 'cand-1' },
+          },
+          {
+            id: 'cand-2',
+            title: 'Good Candidate',
+            failed: false,
+            source: { provider: 'youtube', id: 'cand-2' },
+          },
+        ],
+      },
+    });
+
+    manager.startTrack(item, DUMMY_SOURCE, { autoPlay: true });
+    manager.sourceFailed('Decode error');
+
+    expect(useSoundStore.getState().status).toBe('stopped');
+    expect(useSoundStore.getState().src).toBeNull();
+    expect(manager.hasPendingPlayRequest()).toBe(true);
+    const updated = useQueueStore.getState().getCurrentItem();
+    expect(updated?.track.streamCandidates?.map((c) => c.id)).toEqual([
+      'cand-2',
+    ]);
   });
 });

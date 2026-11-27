@@ -19,6 +19,7 @@ export * from './LogEntry';
 export * from './LogViewer';
 export * from './Loader';
 export * from './Lyrics';
+export * from './MarqueeText';
 export * from './Mosaic';
 export * from './NuclearJam';
 export * from './Pagination';

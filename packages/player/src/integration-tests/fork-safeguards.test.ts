@@ -32,6 +32,9 @@ const REPO_ROOT = path.resolve(PLAYER_ROOT, '../..');
 const readPlayerFile = (relPath: string): string =>
   fs.readFileSync(path.join(PLAYER_ROOT, relPath), 'utf8');
 
+const readRepoFile = (relPath: string): string =>
+  fs.readFileSync(path.join(REPO_ROOT, relPath), 'utf8');
+
 describe('Fork safeguards (protects custom features across upstream syncs)', () => {
   beforeEach(() => {
     resetInMemoryTauriStore();
@@ -430,6 +433,31 @@ describe('Fork safeguards (protects custom features across upstream syncs)', () 
         playSpy.mockRestore();
         audio.remove();
       }
+    });
+  });
+
+  describe('Title scrolling (MarqueeText) safeguards', () => {
+    it('wires MarqueeText across Desktop, Mobile, Nuclear Jam, and global CSS', () => {
+      expect(
+        readRepoFile(
+          'packages/ui/src/components/PlayerBar/PlayerBarNowPlaying.tsx',
+        ),
+      ).toContain('MarqueeText');
+      expect(
+        readRepoFile(
+          'packages/ui/src/components/NuclearJam/NuclearJamNowPlaying.tsx',
+        ),
+      ).toContain('MarqueeText');
+      expect(readPlayerFile('src/components/MobileAndroidShell.tsx')).toContain(
+        'MarqueeText',
+      );
+      expect(
+        readPlayerFile('src/components/DesktopEnhancementsShell.tsx'),
+      ).toContain('MarqueeText');
+
+      const globalCss = readRepoFile('packages/tailwind-config/global.css');
+      expect(globalCss).toContain('nuclear-title-marquee');
+      expect(globalCss).toContain('nuclear-marquee-animate');
     });
   });
 });

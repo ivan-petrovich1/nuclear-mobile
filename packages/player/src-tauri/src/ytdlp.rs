@@ -318,6 +318,114 @@ async fn innertube_search(query: &str, limit: u32) -> Result<Vec<YtdlpSearchResu
     Ok(results)
 }
 
+fn is_unsupported_surround_codec(mime_or_codec: &str) -> bool {
+    let lower = mime_or_codec.to_ascii_lowercase();
+    lower.contains("ec-3")
+        || lower.contains("ac-3")
+        || lower.contains("dtse")
+        || lower.contains("dtsx")
+        || lower.contains("iamf")
+        || lower.contains("mp4a.40.42")
+}
+
+fn select_best_innertube_audio_format<'a>(
+    formats: &'a [serde_json::Value],
+) -> Option<&'a serde_json::Value> {
+    let mut audio_formats: Vec<&serde_json::Value> = formats
+        .iter()
+        .filter(|f| {
+            f.get("mimeType")
+                .and_then(|m| m.as_str())
+                .map(|m| m.starts_with("audio/"))
+                .unwrap_or(false)
+                && f.get("url")
+                    .and_then(|u| u.as_str())
+                    .map(|u| !u.trim().is_empty())
+                    .unwrap_or(false)
+        })
+        .collect();
+
+    audio_formats.sort_by_key(|f| {
+        let mime_lower = f
+            .get("mimeType")
+            .and_then(|m| m.as_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let playable_codec = u8::from(!is_unsupported_surround_codec(&mime_lower));
+        let is_stereo_or_mono =
+            u8::from(f.get("audioChannels").and_then(|c| c.as_u64()).unwrap_or(2) <= 2);
+        let not_auto_dubbed = u8::from(
+            !f.pointer("/audioTrack/isAutoDubbed")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false),
+        );
+        let codec_tier = if mime_lower.contains("audio/mp4") && mime_lower.contains("mp4a") {
+            3u8
+        } else if mime_lower.contains("audio/webm") && mime_lower.contains("opus") {
+            2u8
+        } else if mime_lower.contains("audio/mp4") {
+            1u8
+        } else {
+            0u8
+        };
+        let bitrate = f.get("bitrate").and_then(|b| b.as_u64()).unwrap_or(0);
+        (
+            playable_codec,
+            is_stereo_or_mono,
+            not_auto_dubbed,
+            codec_tier,
+            bitrate,
+        )
+    });
+
+    audio_formats.into_iter().last()
+}
+
+fn select_best_piped_audio_stream<'a>(
+    streams: &'a [serde_json::Value],
+) -> Option<&'a serde_json::Value> {
+    let mut valid: Vec<&serde_json::Value> = streams
+        .iter()
+        .filter(|s| {
+            s.get("url")
+                .and_then(|u| u.as_str())
+                .map(|u| !u.trim().is_empty())
+                .unwrap_or(false)
+        })
+        .collect();
+
+    valid.sort_by_key(|s| {
+        let mime_lower = s
+            .get("mimeType")
+            .and_then(|m| m.as_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let codec_lower = s
+            .get("codec")
+            .and_then(|c| c.as_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let playable_codec = u8::from(
+            !is_unsupported_surround_codec(&mime_lower)
+                && !is_unsupported_surround_codec(&codec_lower),
+        );
+        let codec_tier = if mime_lower.contains("mp4")
+            || mime_lower.contains("m4a")
+            || codec_lower.contains("mp4a")
+        {
+            2u8
+        } else if mime_lower.contains("webm") || codec_lower.contains("opus") {
+            1u8
+        } else {
+            0u8
+        };
+        let bitrate = s.get("bitrate").and_then(|b| b.as_u64()).unwrap_or(0);
+        (playable_codec, codec_tier, bitrate)
+    });
+
+    valid.into_iter().last()
+}
+
 async fn innertube_get_stream(target: &str) -> Result<YtdlpStreamInfo, String> {
     let video_id = extract_video_id(target);
     let client = crate::net::http_client_builder()
@@ -397,29 +505,9 @@ async fn innertube_get_stream(target: &str) -> Result<YtdlpStreamInfo, String> {
             continue;
         };
 
-        let mut audio_formats: Vec<&serde_json::Value> = formats
-            .iter()
-            .filter(|f| {
-                f.get("mimeType")
-                    .and_then(|m| m.as_str())
-                    .map(|m| m.starts_with("audio/"))
-                    .unwrap_or(false)
-                    && f.get("url").and_then(|u| u.as_str()).is_some()
-            })
-            .collect();
-
-        if audio_formats.is_empty() {
+        let Some(chosen) = select_best_innertube_audio_format(formats) else {
             continue;
-        }
-
-        audio_formats.sort_by_key(|f| {
-            let mime = f.get("mimeType").and_then(|m| m.as_str()).unwrap_or("");
-            let is_m4a = if mime.contains("audio/mp4") { 1 } else { 0 };
-            let bitrate = f.get("bitrate").and_then(|b| b.as_u64()).unwrap_or(0);
-            (is_m4a, bitrate)
-        });
-
-        let chosen = audio_formats.last().unwrap();
+        };
         let stream_url = chosen
             .get("url")
             .and_then(|u| u.as_str())
@@ -494,29 +582,40 @@ async fn innertube_get_stream(target: &str) -> Result<YtdlpStreamInfo, String> {
         let Some(streams) = json.get("audioStreams").and_then(|s| s.as_array()) else {
             continue;
         };
-        let mut valid: Vec<&serde_json::Value> = streams
-            .iter()
-            .filter(|s| s.get("url").and_then(|u| u.as_str()).is_some())
-            .collect();
-        if valid.is_empty() {
+        let Some(chosen) = select_best_piped_audio_stream(streams) else {
             continue;
-        }
-        valid.sort_by_key(|s| {
-            let mime = s.get("mimeType").and_then(|m| m.as_str()).unwrap_or("");
-            let is_m4a = if mime.contains("mp4") || mime.contains("m4a") {
-                1
-            } else {
-                0
-            };
-            let bitrate = s.get("bitrate").and_then(|b| b.as_u64()).unwrap_or(0);
-            (is_m4a, bitrate)
-        });
-        let chosen = valid.last().unwrap();
+        };
         let stream_url = chosen
             .get("url")
             .and_then(|u| u.as_str())
             .unwrap()
             .to_string();
+        let mime_lower = chosen
+            .get("mimeType")
+            .and_then(|m| m.as_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let raw_codec = chosen
+            .get("codec")
+            .and_then(|c| c.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty());
+        let is_webm = mime_lower.contains("webm")
+            || raw_codec
+                .map(|c| c.eq_ignore_ascii_case("opus"))
+                .unwrap_or(false);
+        let container = if is_webm {
+            Some("webm".to_string())
+        } else {
+            Some("m4a".to_string())
+        };
+        let codec = raw_codec.map(str::to_string).or_else(|| {
+            if is_webm {
+                Some("opus".to_string())
+            } else {
+                Some("mp4a.40.2".to_string())
+            }
+        });
         let title = json
             .get("title")
             .and_then(|t| t.as_str())
@@ -530,8 +629,8 @@ async fn innertube_get_stream(target: &str) -> Result<YtdlpStreamInfo, String> {
             stream_url,
             duration,
             title,
-            container: Some("m4a".to_string()),
-            codec: Some("mp4a.40.2".to_string()),
+            container,
+            codec,
             album: None,
             artists: uploader.into_iter().collect(),
             album_artists: Vec::new(),
@@ -728,7 +827,7 @@ pub async fn ytdlp_get_stream(
             &app_handle,
             &[
                 "-f",
-                "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio",
+                "bestaudio[ext=m4a][acodec^=mp4a]/bestaudio[ext=webm]/bestaudio[acodec^=mp4a]/bestaudio",
                 "--dump-json",
                 "--no-playlist",
                 "--no-warnings",
@@ -1038,6 +1137,106 @@ not json
                 "https://soundcloud.com/artist/track"
             );
             assert_eq!(normalize_stream_url("not-a-valid-url"), "not-a-valid-url");
+        }
+    }
+
+    mod select_best_audio_format_tests {
+        use super::*;
+        use serde_json::json;
+
+        #[test]
+        fn prefers_stereo_mp4a_over_higher_bitrate_dolby_codecs() {
+            let formats = vec![
+                json!({
+                    "itag": 328,
+                    "mimeType": "audio/mp4; codecs=\"ec-3\"",
+                    "bitrate": 384000,
+                    "audioChannels": 6,
+                    "url": "https://example.com/ec3"
+                }),
+                json!({
+                    "itag": 325,
+                    "mimeType": "audio/mp4; codecs=\"ac-3\"",
+                    "bitrate": 384000,
+                    "audioChannels": 6,
+                    "url": "https://example.com/ac3"
+                }),
+                json!({
+                    "itag": 140,
+                    "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+                    "bitrate": 128000,
+                    "audioChannels": 2,
+                    "url": "https://example.com/aac"
+                }),
+            ];
+
+            let chosen = select_best_innertube_audio_format(&formats).unwrap();
+            assert_eq!(chosen["url"], "https://example.com/aac");
+        }
+
+        #[test]
+        fn prefers_stereo_mp4a_over_multichannel_mp4a() {
+            let formats = vec![
+                json!({
+                    "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+                    "bitrate": 256000,
+                    "audioChannels": 6,
+                    "url": "https://example.com/aac-6ch"
+                }),
+                json!({
+                    "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+                    "bitrate": 128000,
+                    "audioChannels": 2,
+                    "url": "https://example.com/aac-2ch"
+                }),
+            ];
+
+            let chosen = select_best_innertube_audio_format(&formats).unwrap();
+            assert_eq!(chosen["url"], "https://example.com/aac-2ch");
+        }
+
+        #[test]
+        fn prefers_original_track_over_auto_dubbed_track() {
+            let formats = vec![
+                json!({
+                    "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+                    "bitrate": 128000,
+                    "audioChannels": 2,
+                    "audioTrack": { "isAutoDubbed": true },
+                    "url": "https://example.com/dubbed"
+                }),
+                json!({
+                    "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+                    "bitrate": 128000,
+                    "audioChannels": 2,
+                    "audioTrack": { "isAutoDubbed": false },
+                    "url": "https://example.com/original"
+                }),
+            ];
+
+            let chosen = select_best_innertube_audio_format(&formats).unwrap();
+            assert_eq!(chosen["url"], "https://example.com/original");
+        }
+
+        #[test]
+        fn falls_back_to_opus_webm_when_no_mp4a_is_available() {
+            let formats = vec![
+                json!({
+                    "mimeType": "audio/mp4; codecs=\"ec-3\"",
+                    "bitrate": 384000,
+                    "audioChannels": 6,
+                    "url": "https://example.com/ec3"
+                }),
+                json!({
+                    "mimeType": "audio/webm; codecs=\"opus\"",
+                    "bitrate": 160000,
+                    "audioChannels": 2,
+                    "url": "https://example.com/opus"
+                }),
+            ];
+
+            let chosen = select_best_innertube_audio_format(&formats).unwrap();
+            assert_eq!(chosen["url"], "https://example.com/opus");
         }
     }
 }

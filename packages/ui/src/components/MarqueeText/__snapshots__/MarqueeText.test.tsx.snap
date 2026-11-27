@@ -1,0 +1,33 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`MarqueeText > (Snapshot) renders default div cleanly 1`] = `
+<div>
+  <div
+    class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap"
+    data-testid="marquee-title"
+  >
+    <span
+      class="nuclear-marquee-content inline-block whitespace-nowrap"
+      data-marquee-content=""
+    >
+      Short Song Title
+    </span>
+  </div>
+</div>
+`;
+
+exports[`MarqueeText > (Snapshot) renders heading element when as="h2" 1`] = `
+<div>
+  <h2
+    class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap text-xl font-bold"
+    data-testid="heading"
+  >
+    <span
+      class="nuclear-marquee-content inline-block whitespace-nowrap"
+      data-marquee-content=""
+    >
+      Heading Song Title
+    </span>
+  </h2>
+</div>
+`;

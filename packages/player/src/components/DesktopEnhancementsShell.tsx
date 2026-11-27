@@ -33,6 +33,7 @@ import { FC, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { pickArtwork, type RepeatMode, type Track } from '@nuclearplayer/model';
+import { MarqueeText } from '@nuclearplayer/ui';
 
 import { useCoreSetting } from '../hooks/useCoreSetting';
 import { useCurrentQueueItem } from '../hooks/useCurrentQueueItem';
@@ -561,7 +562,8 @@ export const DesktopEnhancementsShell: FC = () => {
                       <div
                         className="rounded-2xl border border-white/15 p-5 text-center text-white shadow-xl"
                         style={{
-                          background: `linear-gradient(135deg, ${dominantColor}, #141024 85%)`,
+                          backgroundImage: `linear-gradient(135deg, ${dominantColor}, #141024 85%)`,
+                          backgroundColor: '#141024',
                         }}
                       >
                         <div className="text-4xl">{persona.emoji}</div>
@@ -860,7 +862,7 @@ export const DesktopEnhancementsShell: FC = () => {
                   color: '#ffffff',
                 }
               : {
-                  background: oledBlackMode
+                  backgroundImage: oledBlackMode
                     ? `radial-gradient(circle at 50% 18%, ${dominantColor}44 0%, #000000 70%)`
                     : `radial-gradient(circle at 50% 18%, ${dominantColor}66 0%, var(--background) 75%)`,
                   backgroundColor: oledBlackMode
@@ -1038,16 +1040,20 @@ export const DesktopEnhancementsShell: FC = () => {
                 <div className="mt-4 space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <h2 className="truncate text-2xl font-extrabold">
+                      <MarqueeText
+                        as="h2"
+                        className="text-2xl font-extrabold"
+                        data-testid="desktop-now-playing-title"
+                      >
                         {track?.title ?? 'No Track Playing'}
-                      </h2>
+                      </MarqueeText>
                       <p className="truncate text-sm opacity-75">
                         {artistName}
                       </p>
                     </div>
 
                     {track && (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex shrink-0 items-center gap-1.5">
                         {p2pPeerAddress.trim() && (
                           <button
                             type="button"

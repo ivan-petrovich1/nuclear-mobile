@@ -166,7 +166,7 @@ export class StreamResolution {
       return;
     }
 
-    if (resolved.failed) {
+    if (resolved.failed || !resolved.stream?.url?.trim()) {
       useQueueStore.getState().removeCandidate(item.id, candidate.id);
       const remaining = candidates.filter(
         (current) => current.id !== candidate.id,
@@ -202,6 +202,7 @@ export class StreamResolution {
   }
 
   private failItem(itemId: string, errorKey: string): void {
+    playbackManager.clearPendingPlayback(itemId);
     useQueueStore.getState().updateItemState(itemId, {
       status: 'error',
       error: errorKey,

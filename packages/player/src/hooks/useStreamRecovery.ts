@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 
 import { eventBus } from '../services/eventBus';
 import { Logger } from '../services/logger';
+import { playbackManager } from '../services/playback';
 import { streamResolution } from '../services/streamResolution';
 import { useQueueStore } from '../stores/queue/queueStore';
 import { useSoundStore } from '../stores/soundStore';
@@ -25,6 +26,9 @@ export const useStreamRecovery = (maxAttemptsPerItem = 2): void => {
         Logger.streaming.warn(
           `Stream for '${item.track.title}' became invalid again after ${attemptsRef.current} recoveries; giving up`,
         );
+        useSoundStore.getState().stop();
+        useSoundStore.getState().setSrc(null);
+        playbackManager.clearPendingPlayback(item.id);
         useQueueStore.getState().updateItemState(item.id, {
           status: 'error',
           error: 'streaming:errors.streamRecoveryFailed',
@@ -38,7 +42,9 @@ export const useStreamRecovery = (maxAttemptsPerItem = 2): void => {
       );
 
       await streamResolution.resolveWithFreshStreams(item, {
-        autoPlay: useSoundStore.getState().status === 'playing',
+        autoPlay:
+          useSoundStore.getState().status === 'playing' ||
+          playbackManager.hasPendingPlayRequest(),
         startPositionSeconds: useSoundStore.getState().seek,
       });
     });

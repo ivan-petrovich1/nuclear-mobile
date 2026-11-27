@@ -28,6 +28,51 @@ type SpotifyEmbedEntity = {
   };
 };
 
+type PathfinderTrackItem = {
+  itemV2?: {
+    data?: {
+      __typename?: string;
+      uri?: string;
+      name?: string;
+      trackDuration?: { totalMilliseconds?: number };
+      artists?: {
+        items?: Array<{
+          uri?: string;
+          profile?: { name?: string };
+        }>;
+      };
+      albumOfTrack?: {
+        uri?: string;
+        name?: string;
+        coverArt?: {
+          sources?: Array<{ url?: string; width?: number; height?: number }>;
+        };
+      };
+    };
+  };
+};
+
+type PathfinderPlaylistResponse = {
+  data?: {
+    playlistV2?: {
+      content?: {
+        totalCount?: number;
+        items?: PathfinderTrackItem[];
+      };
+    };
+  };
+};
+
+const PATHFINDER_V2_URL = 'https://api-partner.spotify.com/pathfinder/v2/query';
+const FETCH_PLAYLIST_CONTENTS_HASHES = [
+  'c56c706a062f82052d87fdaeeb300a258d2d54153222ef360682a0ee625284d9',
+  '9c53fb83f35c6a177be88bf1b67cb080b853e86b576ed174216faa8f9164fc8f',
+];
+const PAGE_LIMIT = 100;
+const MAX_PLAYLIST_TRACKS = 5000;
+const MOBILE_UA =
+  'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
+
 type SpotifySyncState = {
   accountInput: string;
   autoSyncOnLaunch: boolean;
@@ -67,8 +112,7 @@ export const extractSpotifyUserId = (input: string): string | null => {
 const fetchText = async (url: string): Promise<string> => {
   const res = await httpHost.fetch(url, {
     headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+      'User-Agent': MOBILE_UA,
       'Accept-Language': 'en-US,en;q=0.9',
     },
   });
@@ -78,10 +122,223 @@ const fetchText = async (url: string): Promise<string> => {
   return res.body;
 };
 
+const queryPathfinderPlaylistPage = async (
+  spotifyPlaylistId: string,
+  accessToken: string,
+  sha256Hash: string,
+  offset: number,
+  limit: number,
+): Promise<{ totalCount: number; items: PathfinderTrackItem[] }> => {
+  const res = await httpHost.fetch(PATHFINDER_V2_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      'User-Agent': MOBILE_UA,
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
+    body: JSON.stringify({
+      operationName: 'fetchPlaylistContents',
+      variables: {
+        uri: `spotify:playlist:${spotifyPlaylistId}`,
+        offset,
+        limit,
+      },
+      extensions: {
+        persistedQuery: {
+          version: 1,
+          sha256Hash,
+        },
+      },
+    }),
+  });
+
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`Pathfinder HTTP ${res.status}`);
+  }
+
+  const parsed = JSON.parse(res.body) as PathfinderPlaylistResponse;
+  const content = parsed.data?.playlistV2?.content;
+  if (!content || !Array.isArray(content.items)) {
+    throw new Error('Malformed Pathfinder playlist content response');
+  }
+
+  return {
+    totalCount:
+      typeof content.totalCount === 'number'
+        ? content.totalCount
+        : content.items.length,
+    items: content.items,
+  };
+};
+
+const mapPathfinderItemToTrack = (
+  spotifyPlaylistId: string,
+  item: PathfinderTrackItem,
+  globalIdx: number,
+  fallbackCoverUrl?: string,
+): Track | null => {
+  const data = item.itemV2?.data;
+  if (!data?.name) {
+    return null;
+  }
+
+  const rawArtists = (data.artists?.items ?? [])
+    .map((artist, aIdx) => ({
+      name: artist.profile?.name?.trim() || '',
+      roles: [] as string[],
+      source: {
+        provider: 'spotify-sync',
+        id: artist.uri || `${spotifyPlaylistId}:artist:${globalIdx}:${aIdx}`,
+      },
+    }))
+    .filter((artist) => artist.name.length > 0);
+
+  const artists =
+    rawArtists.length > 0
+      ? rawArtists
+      : [
+          {
+            name: 'Unknown Artist',
+            roles: [],
+            source: {
+              provider: 'spotify-sync',
+              id: `${spotifyPlaylistId}:artist:${globalIdx}:0`,
+            },
+          },
+        ];
+
+  const coverSources = (data.albumOfTrack?.coverArt?.sources ?? []).filter(
+    (source): source is { url: string; width?: number; height?: number } =>
+      Boolean(source.url),
+  );
+
+  const artworkItems =
+    coverSources.length > 0
+      ? coverSources.map((source) => ({
+          url: source.url,
+          width: source.width,
+          height: source.height,
+          purpose: 'thumbnail' as const,
+        }))
+      : fallbackCoverUrl
+        ? [{ url: fallbackCoverUrl, purpose: 'thumbnail' as const }]
+        : undefined;
+
+  return {
+    title: data.name,
+    artists,
+    album: data.albumOfTrack?.name
+      ? {
+          title: data.albumOfTrack.name,
+          source: {
+            provider: 'spotify-sync',
+            id:
+              data.albumOfTrack.uri ||
+              `${spotifyPlaylistId}:album:${globalIdx}`,
+          },
+        }
+      : undefined,
+    durationMs:
+      typeof data.trackDuration?.totalMilliseconds === 'number'
+        ? data.trackDuration.totalMilliseconds
+        : undefined,
+    artwork: artworkItems ? { items: artworkItems } : undefined,
+    source: {
+      provider: 'spotify-sync',
+      id:
+        data.uri || `spotify:playlist:${spotifyPlaylistId}:track:${globalIdx}`,
+    },
+  };
+};
+
+export const fetchPathfinderPlaylistTracks = async (
+  spotifyPlaylistId: string,
+  accessToken: string,
+  fallbackCoverUrl?: string,
+): Promise<Track[] | null> => {
+  let workingHash: string | null = null;
+  let totalCount = 0;
+  let offset = 0;
+  const collected: Track[] = [];
+
+  for (const candidateHash of FETCH_PLAYLIST_CONTENTS_HASHES) {
+    try {
+      const firstPage = await queryPathfinderPlaylistPage(
+        spotifyPlaylistId,
+        accessToken,
+        candidateHash,
+        0,
+        PAGE_LIMIT,
+      );
+      workingHash = candidateHash;
+      totalCount = firstPage.totalCount;
+      for (const item of firstPage.items) {
+        const track = mapPathfinderItemToTrack(
+          spotifyPlaylistId,
+          item,
+          offset,
+          fallbackCoverUrl,
+        );
+        if (track) {
+          collected.push(track);
+        }
+        offset += 1;
+      }
+      if (firstPage.items.length === 0) {
+        return collected;
+      }
+      break;
+    } catch {
+      // Try next persisted query hash
+    }
+  }
+
+  if (!workingHash) {
+    return null;
+  }
+
+  while (offset < totalCount && offset < MAX_PLAYLIST_TRACKS) {
+    try {
+      const page = await queryPathfinderPlaylistPage(
+        spotifyPlaylistId,
+        accessToken,
+        workingHash,
+        offset,
+        PAGE_LIMIT,
+      );
+      if (page.items.length === 0) {
+        break;
+      }
+      for (const item of page.items) {
+        const track = mapPathfinderItemToTrack(
+          spotifyPlaylistId,
+          item,
+          offset,
+          fallbackCoverUrl,
+        );
+        if (track) {
+          collected.push(track);
+        }
+        offset += 1;
+      }
+    } catch {
+      return collected.length > 0 ? collected : null;
+    }
+  }
+
+  return collected;
+};
+
 const parseEmbedPlaylist = (
   spotifyPlaylistId: string,
   html: string,
-): { name: string; coverUrl?: string; tracks: Track[] } | null => {
+): {
+  name: string;
+  coverUrl?: string;
+  accessToken?: string;
+  tracks: Track[];
+} | null => {
   const match = html.match(
     /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/,
   );
@@ -92,6 +349,11 @@ const parseEmbedPlaylist = (
     props?: {
       pageProps?: {
         state?: {
+          settings?: {
+            session?: {
+              accessToken?: string;
+            };
+          };
           data?: {
             entity?: SpotifyEmbedEntity;
           };
@@ -99,10 +361,12 @@ const parseEmbedPlaylist = (
       };
     };
   };
-  const entity = json.props?.pageProps?.state?.data?.entity;
+  const state = json.props?.pageProps?.state;
+  const entity = state?.data?.entity;
   if (!entity || !entity.name) {
     return null;
   }
+  const accessToken = state?.settings?.session?.accessToken;
 
   const coverUrl =
     entity.visualIdentity?.image?.[0]?.url ??
@@ -137,7 +401,7 @@ const parseEmbedPlaylist = (
       };
     });
 
-  return { name: entity.name, coverUrl, tracks };
+  return { name: entity.name, coverUrl, accessToken, tracks };
 };
 
 export const useSpotifyAccountSyncStore = create<SpotifySyncState>()(
@@ -175,7 +439,7 @@ export const useSpotifyAccountSyncStore = create<SpotifySyncState>()(
           );
           const playlistIds = Array.from(
             new Set(Array.from(idMatches, (m) => m[1])),
-          ).slice(0, 25);
+          ).slice(0, 50);
 
           if (playlistIds.length === 0) {
             set({
@@ -209,10 +473,21 @@ export const useSpotifyAccountSyncStore = create<SpotifySyncState>()(
               if (!parsed || parsed.tracks.length === 0) {
                 continue;
               }
-              totalTracks += parsed.tracks.length;
+              const paginatedTracks = parsed.accessToken
+                ? await fetchPathfinderPlaylistTracks(
+                    spId,
+                    parsed.accessToken,
+                    parsed.coverUrl,
+                  )
+                : null;
+              const resolvedTracks =
+                paginatedTracks && paginatedTracks.length > 0
+                  ? paginatedTracks
+                  : parsed.tracks;
+              totalTracks += resolvedTracks.length;
 
               const now = new Date().toISOString();
-              const items: PlaylistItem[] = parsed.tracks.map((track) => ({
+              const items: PlaylistItem[] = resolvedTracks.map((track) => ({
                 id: uuidv4(),
                 track,
                 addedAtIso: now,

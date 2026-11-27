@@ -35,6 +35,7 @@ import { FC, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { pickArtwork, type RepeatMode, type Track } from '@nuclearplayer/model';
+import { MarqueeText } from '@nuclearplayer/ui';
 
 import { useCoreSetting } from '../hooks/useCoreSetting';
 import { useCurrentQueueItem } from '../hooks/useCurrentQueueItem';
@@ -483,9 +484,9 @@ export const MobileAndroidShell: FC = () => {
         {remoteState?.isPlaying && !isPlaying && (
           <div className="border-border/50 flex items-center justify-between gap-2 border-b bg-emerald-500/15 px-3 py-1.5 text-xs">
             <div className="min-w-0 flex-1">
-              <div className="truncate font-extrabold text-emerald-300">
-                💻 {remoteState.deviceName}: {remoteState.title || 'Playing'}
-              </div>
+              <MarqueeText className="font-extrabold text-emerald-300">
+                {`💻 ${remoteState.deviceName}: ${remoteState.title || 'Playing'}`}
+              </MarqueeText>
               {remoteState.artist && (
                 <div className="truncate text-[10px] opacity-75">
                   {remoteState.artist}
@@ -540,9 +541,10 @@ export const MobileAndroidShell: FC = () => {
           <div
             className="relative flex cursor-pointer items-center gap-2.5 px-3 py-2 select-none"
             style={{
-              background: oledBlackMode
+              backgroundImage: oledBlackMode
                 ? `linear-gradient(90deg, rgba(0,0,0,0.95), ${dominantColor}28)`
                 : `linear-gradient(90deg, var(--muted), ${dominantColor}33)`,
+              backgroundColor: oledBlackMode ? '#000000' : 'var(--muted)',
             }}
             onTouchStart={(e) => {
               const t = e.touches[0];
@@ -599,12 +601,15 @@ export const MobileAndroidShell: FC = () => {
             </div>
 
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <span className="truncate text-sm font-bold">
+              <div className="flex min-w-0 items-center gap-1.5">
+                <MarqueeText
+                  className="min-w-0 text-sm font-bold"
+                  data-testid="mobile-mini-player-title"
+                >
                   {track.title}
-                </span>
+                </MarqueeText>
                 {isTrackDownloaded && (
-                  <span className="py-0.2 rounded bg-emerald-500/20 px-1 text-[9px] font-bold text-emerald-400">
+                  <span className="py-0.2 shrink-0 rounded bg-emerald-500/20 px-1 text-[9px] font-bold text-emerald-400">
                     OFFLINE
                   </span>
                 )}
@@ -862,7 +867,8 @@ export const MobileAndroidShell: FC = () => {
                   <div
                     className="rounded-2xl border border-white/15 p-5 text-center text-white shadow-xl"
                     style={{
-                      background: `linear-gradient(135deg, ${dominantColor}, #141024 85%)`,
+                      backgroundImage: `linear-gradient(135deg, ${dominantColor}, #141024 85%)`,
+                      backgroundColor: '#141024',
                     }}
                   >
                     <div className="text-4xl">{persona.emoji}</div>
@@ -1193,7 +1199,7 @@ export const MobileAndroidShell: FC = () => {
                   color: '#ffffff',
                 }
               : {
-                  background: oledBlackMode
+                  backgroundImage: oledBlackMode
                     ? `radial-gradient(circle at 50% 18%, ${dominantColor}44 0%, #000000 70%)`
                     : `radial-gradient(circle at 50% 18%, ${dominantColor}66 0%, var(--background) 75%)`,
                   backgroundColor: oledBlackMode
@@ -1470,14 +1476,18 @@ export const MobileAndroidShell: FC = () => {
               <div className="mt-4 space-y-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-xl font-extrabold">
+                    <MarqueeText
+                      as="h2"
+                      className="text-xl font-extrabold"
+                      data-testid="mobile-now-playing-title"
+                    >
                       {track?.title ?? 'No Track Playing'}
-                    </h2>
+                    </MarqueeText>
                     <p className="truncate text-sm opacity-75">{artistName}</p>
                   </div>
 
                   {track && (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex shrink-0 items-center gap-1.5">
                       {p2pPeerAddress.trim() && (
                         <button
                           className="flex size-9 items-center justify-center rounded-full bg-black/25 transition-transform active:scale-90"

@@ -21,7 +21,12 @@ export class AudioSourceFactory {
     const proxyUrl = this.proxiedUrl(stream.url, await this.streamServerPort());
 
     const durationMs = stream.durationMs ?? candidate.durationMs;
-    if (this.isFmp4(stream) && durationMs) {
+    const mseMimeType = `audio/mp4; codecs="${stream.codec ?? 'mp4a.40.2'}"`;
+    const mseCodecSupported =
+      typeof MediaSource === 'undefined' ||
+      typeof MediaSource.isTypeSupported !== 'function' ||
+      MediaSource.isTypeSupported(mseMimeType);
+    if (this.isFmp4(stream) && durationMs && mseCodecSupported) {
       return {
         url: proxyUrl,
         protocol: 'mse',

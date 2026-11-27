@@ -341,6 +341,29 @@ describe('MseController', () => {
     expect(postSeekAppendCalls.length).toBe(1);
   });
 
+  it('reports an error through onError instead of rejecting when addSourceBuffer rejects an unsupported codec', async () => {
+    const controller = new MseController();
+    const onError = vi.fn();
+    const initPromise = controller.init(fixture.audio, MSE_URL, {
+      codec: 'ec-3',
+      onError,
+    });
+
+    await vi.waitFor(() => expect(fixture.latestMediaSource).not.toBeNull());
+
+    fixture.latestMediaSource!.addSourceBuffer.mockImplementationOnce(() => {
+      throw new DOMException(
+        'Unsupported MIME type or codec',
+        'NotSupportedError',
+      );
+    });
+
+    fixture.latestMediaSource!.open();
+    await initPromise;
+
+    expect(onError).toHaveBeenCalledWith(new SoundError('unsupportedFormat'));
+  });
+
   it('reports an error through onError instead of rejecting when the init segment append fails', async () => {
     const controller = new MseController();
     const onError = vi.fn();

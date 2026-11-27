@@ -1866,10 +1866,15 @@ exports[`Artist view > with bio provider > (Snapshot) renders the artist view 1`
               class="min-w-0 flex-1"
             >
               <div
-                class="truncate text-sm font-bold"
+                class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap text-sm font-bold"
                 data-testid="now-playing-title"
               >
-                No track playing
+                <span
+                  class="nuclear-marquee-content inline-block whitespace-nowrap"
+                  data-marquee-content=""
+                >
+                  No track playing
+                </span>
               </div>
               <div
                 class="truncate text-xs opacity-70"
@@ -4259,10 +4264,15 @@ exports[`Artist view > with social stats provider > (Snapshot) renders the artis
               class="min-w-0 flex-1"
             >
               <div
-                class="truncate text-sm font-bold"
+                class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap text-sm font-bold"
                 data-testid="now-playing-title"
               >
-                No track playing
+                <span
+                  class="nuclear-marquee-content inline-block whitespace-nowrap"
+                  data-marquee-content=""
+                >
+                  No track playing
+                </span>
               </div>
               <div
                 class="truncate text-xs opacity-70"

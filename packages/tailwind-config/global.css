@@ -303,3 +303,73 @@ html[data-custom-wallpaper='true'] .surface-popover {
 .nuclear-heart-burst {
   animation: nuclear-heart-burst 0.75s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
+
+@keyframes nuclear-title-marquee {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+  46%,
+  58% {
+    transform: translateX(var(--marquee-distance, 0px));
+  }
+  92%,
+  100% {
+    transform: translateX(0);
+  }
+}
+
+.nuclear-marquee-content {
+  text-decoration-line: inherit;
+}
+
+.nuclear-marquee-mask {
+  mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - 14px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black 0,
+    black calc(100% - 14px),
+    transparent 100%
+  );
+}
+
+.nuclear-marquee-animate {
+  will-change: transform;
+  animation-name: nuclear-title-marquee;
+  animation-duration: var(--marquee-duration, 8s);
+  animation-timing-function: linear;
+  animation-delay: 0.8s;
+  animation-iteration-count: infinite;
+}
+
+[data-transitions='suspended'] .nuclear-marquee-animate {
+  animation-play-state: paused;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .nuclear-marquee-container:hover .nuclear-marquee-animate {
+    animation-play-state: paused;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nuclear-marquee-mask {
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  .nuclear-marquee-animate {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    animation: none;
+    transform: none;
+    will-change: auto;
+  }
+}

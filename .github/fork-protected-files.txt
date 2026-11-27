@@ -50,3 +50,6 @@ review-required packages/player/src/services/streamResolution/streamResolution.t
 review-required packages/player/src/components/ConnectedTrackTable.tsx
 review-required packages/player/src/components/ConnectedTrackContextMenu.tsx
 review-required packages/player/src/components/ConnectedPlayerBar/
+review-required packages/tailwind-config/global.css
+review-required packages/ui/src/components/PlayerBar/PlayerBarNowPlaying.tsx
+review-required packages/ui/src/components/NuclearJam/NuclearJamNowPlaying.tsx

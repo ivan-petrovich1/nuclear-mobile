@@ -28,10 +28,15 @@ exports[`PlayerBar > (Snapshot) active states render 1`] = `
             class="min-w-0 flex-1"
           >
             <div
-              class="truncate text-sm font-bold"
+              class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap text-sm font-bold"
               data-testid="now-playing-title"
             >
-              Crystalized
+              <span
+                class="nuclear-marquee-content inline-block whitespace-nowrap"
+                data-marquee-content=""
+              >
+                Crystalized
+              </span>
             </div>
             <div
               class="truncate text-xs opacity-70"
@@ -325,10 +330,15 @@ exports[`PlayerBar > (Snapshot) default render 1`] = `
             class="min-w-0 flex-1"
           >
             <div
-              class="truncate text-sm font-bold cursor-pointer hover:underline"
+              class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap text-sm font-bold cursor-pointer hover:underline"
               data-testid="now-playing-title"
             >
-              Song Title
+              <span
+                class="nuclear-marquee-content inline-block whitespace-nowrap"
+                data-marquee-content=""
+              >
+                Song Title
+              </span>
             </div>
             <div
               class="truncate text-xs opacity-70 cursor-pointer hover:underline"
@@ -614,10 +624,15 @@ exports[`PlayerBar > (Snapshot) long metadata truncation 1`] = `
               class="min-w-0 flex-1"
             >
               <div
-                class="truncate text-sm font-bold"
+                class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap text-sm font-bold"
                 data-testid="now-playing-title"
               >
-                An Incredibly, Ridiculously Long Song Title That Should Truncate Nicely
+                <span
+                  class="nuclear-marquee-content inline-block whitespace-nowrap"
+                  data-marquee-content=""
+                >
+                  An Incredibly, Ridiculously Long Song Title That Should Truncate Nicely
+                </span>
               </div>
               <div
                 class="truncate text-xs opacity-70"
@@ -922,10 +937,15 @@ exports[`PlayerBar > (Snapshot) no artwork fallback 1`] = `
             class="min-w-0 flex-1"
           >
             <div
-              class="truncate text-sm font-bold"
+              class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap text-sm font-bold"
               data-testid="now-playing-title"
             >
-              Untitled Track
+              <span
+                class="nuclear-marquee-content inline-block whitespace-nowrap"
+                data-marquee-content=""
+              >
+                Untitled Track
+              </span>
             </div>
             <div
               class="truncate text-xs opacity-70"

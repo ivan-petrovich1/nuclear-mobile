@@ -58,10 +58,15 @@ exports[`NuclearJamNowPlaying > (Snapshot) renders with a lyrics button 1`] = `
         class="short:text-left min-w-0 flex-1 text-center"
       >
         <div
-          class="text-foreground short:text-base truncate text-xl font-black"
+          class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap text-foreground short:text-base text-xl font-black"
           data-testid="now-playing-title"
         >
-          Placeholder Song
+          <span
+            class="nuclear-marquee-content inline-block whitespace-nowrap"
+            data-marquee-content=""
+          >
+            Placeholder Song
+          </span>
         </div>
         <div
           class="text-foreground/60 short:mt-0 short:text-xs mt-1 truncate text-sm"
@@ -130,10 +135,15 @@ exports[`NuclearJamNowPlaying > (Snapshot) renders with cover art 1`] = `
         class="short:text-left min-w-0 flex-1 text-center"
       >
         <div
-          class="text-foreground short:text-base truncate text-xl font-black"
+          class="nuclear-marquee-container block max-w-full min-w-0 overflow-hidden whitespace-nowrap text-foreground short:text-base text-xl font-black"
           data-testid="now-playing-title"
         >
-          Placeholder Song
+          <span
+            class="nuclear-marquee-content inline-block whitespace-nowrap"
+            data-marquee-content=""
+          >
+            Placeholder Song
+          </span>
         </div>
         <div
           class="text-foreground/60 short:mt-0 short:text-xs mt-1 truncate text-sm"

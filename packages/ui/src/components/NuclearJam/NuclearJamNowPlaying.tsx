@@ -3,6 +3,7 @@ import { FC } from 'react';
 
 import { cn } from '../../utils';
 import { Button } from '../Button';
+import { MarqueeText } from '../MarqueeText';
 
 export type NuclearJamNowPlayingLabels = {
   lyrics: string;
@@ -61,12 +62,12 @@ export const NuclearJamNowPlaying: FC<NuclearJamNowPlayingProps> = ({
         <span aria-hidden className="short:hidden size-10 shrink-0" />
       )}
       <div className="short:text-left min-w-0 flex-1 text-center">
-        <div
-          className="text-foreground short:text-base truncate text-xl font-black"
+        <MarqueeText
+          className="text-foreground short:text-base text-xl font-black"
           data-testid="now-playing-title"
         >
           {title}
-        </div>
+        </MarqueeText>
         {artist && (
           <div
             className="text-foreground/60 short:mt-0 short:text-xs mt-1 truncate text-sm"

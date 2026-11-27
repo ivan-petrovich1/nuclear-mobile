@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-11-27T17:30",
+    "description": "v1.1.1 - Added smooth scrolling MarqueeText titles for overflowing track names across Player Bar, Nuclear Jam, and Now Playing views; added full Spotify public playlist pagination beyond 100 tracks; fixed full-screen Now Playing background turning transparent on track switch; fixed silent playback and timer-moving-in-silence bugs (avoiding Dolby ec-3/ac-3 and 5.1 surround streams, preserving Piped WebM/Opus metadata, catching unsupported MSE codecs, unlocking Web Audio DSP AudioContext, and preventing playback with empty or failed streams).",
+    "type": "fix",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.1.1", "color": "purple" },
+      { "label": "All Ports", "color": "green" }
+    ]
+  },
+  {
     "date": "2026-11-27T01:58",
     "description": "v1.1.0 - Added inline Add songs panel inside playlists, fixed mobile Add to playlist submenu overflow, synced Stream Verification state across views, capped MSE StallDetector nudges, and added premature stream EOF recovery instead of skipping tracks.",
     "type": "fix",
