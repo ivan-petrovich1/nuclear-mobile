@@ -8,6 +8,10 @@ import { useTranslation } from '@nuclearplayer/i18n';
 import { useCoreSetting } from '../hooks/useCoreSetting';
 import { eventBus } from '../services/eventBus';
 import { Logger } from '../services/logger';
+import {
+  disposeActiveDspGraph,
+  syncAudioElementDsp,
+} from '../services/mobileEnhancements';
 import { playbackManager } from '../services/playback';
 import { useQueueStore } from '../stores/queue/queueStore';
 import { useSoundStore } from '../stores/soundStore';
@@ -39,6 +43,15 @@ export const SoundProvider: FC<PropsWithChildren> = ({ children }) => {
       useSoundStore.getState().setCrossfadeMs(crossfadeMs);
     }
   }, [crossfadeMs]);
+
+  useEffect(() => {
+    if (src?.url) {
+      syncAudioElementDsp();
+    }
+    return () => {
+      disposeActiveDspGraph();
+    };
+  }, [src?.url]);
 
   const handleTimeUpdate = useCallback(
     ({ position, duration }: { position: number; duration: number }) => {
@@ -75,6 +88,7 @@ export const SoundProvider: FC<PropsWithChildren> = ({ children }) => {
     <>
       {src && (
         <Sound
+          key={src.url}
           src={src}
           status={status}
           seek={seek}

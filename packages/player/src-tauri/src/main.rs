@@ -26,12 +26,32 @@ fn main() {
 fn set_audio_stream_identity() {
     glib::set_application_name("Nuclear");
 
-    if std::env::var("PULSE_PROP").is_err() {
-        let icon =
-            std::env::var("FLATPAK_ID").unwrap_or_else(|_| "nuclear-music-player".to_string());
-        unsafe {
-            std::env::set_var("PULSE_PROP", format!("application.icon_name={icon}"));
+    let icon = std::env::var("FLATPAK_ID").unwrap_or_else(|_| "nuclear-music-player".to_string());
+    // WirePlumber keys `stream-properties` by `application.name="Nuclear"` across both
+    // GStreamer `music` and `webaudio` roles. Without `state.restore-props=false`, mute or
+    // volume states saved from one `<audio>` pipeline leak onto newly created Web Audio
+    // `AudioContext` (`webaudio`) sinks—permanently muting or double-attenuating playback
+    // while `currentTime` keeps advancing. Keep `state.restore-target` enabled so user sink
+    // selection (e.g. EasyEffects / Bluetooth headphones) is still remembered.
+    match std::env::var("PULSE_PROP") {
+        Ok(existing) => {
+            if !existing.contains("state.restore-props") {
+                let updated = if existing.trim().is_empty() {
+                    format!("application.icon_name={icon} state.restore-props=false")
+                } else {
+                    format!("{existing} state.restore-props=false")
+                };
+                unsafe {
+                    std::env::set_var("PULSE_PROP", updated);
+                }
+            }
         }
+        Err(_) => unsafe {
+            std::env::set_var(
+                "PULSE_PROP",
+                format!("application.icon_name={icon} state.restore-props=false"),
+            );
+        },
     }
 }
 

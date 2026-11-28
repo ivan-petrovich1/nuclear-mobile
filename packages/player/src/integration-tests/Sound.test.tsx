@@ -76,6 +76,22 @@ describe('Sound component', () => {
     );
     expect(sources.every((s) => s === '/b.mp3')).toBe(true);
   });
+
+  it('mounts a fresh audio element when src.url changes directly so Web Audio graphs never stay bound to a reloaded element', async () => {
+    await SoundWrapper.mount();
+    SoundWrapper.setSrc(srcA);
+    await waitFor(() => {
+      expect(SoundWrapper.getAudios()).toHaveLength(1);
+    });
+    const audioBefore = SoundWrapper.getAudios()[0];
+
+    SoundWrapper.setSrc(srcB);
+    await waitFor(() => {
+      const audios = SoundWrapper.getAudios();
+      expect(audios).toHaveLength(1);
+      expect(audios[0]).not.toBe(audioBefore);
+    });
+  });
 });
 
 describe('Repeat mode behavior when a track ends', () => {

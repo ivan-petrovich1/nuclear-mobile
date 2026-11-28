@@ -5,7 +5,11 @@ import type { StreamingProvider } from '@nuclearplayer/plugin-sdk';
 
 import { useSettingsStore } from '../stores/settingsStore';
 import { providersHost } from './providersHost';
-import { createStreamingHost, isStreamExpired } from './streamingHost';
+import {
+  createStreamingHost,
+  isStreamExpired,
+  resolveAllProviderCandidates,
+} from './streamingHost';
 
 describe('streamingHost', () => {
   let streamingHost: ReturnType<typeof createStreamingHost>;
@@ -477,6 +481,44 @@ describe('streamingHost', () => {
 
       expect(isStreamExpired(expiringSoon)).toBe(true);
       expect(isStreamExpired(stillFresh)).toBe(false);
+    });
+  });
+
+  describe('resolveAllProviderCandidates', () => {
+    it('returns candidates from fast providers even when another provider hangs', async () => {
+      vi.useRealTimers();
+      const fastCandidate: StreamCandidate = {
+        id: 'fast-1',
+        title: 'Fast Track',
+        source: { provider: 'youtube', id: 'fast-1' },
+        failed: false,
+      };
+      const fastProvider: StreamingProvider = {
+        id: 'youtube',
+        kind: 'streaming',
+        name: 'YouTube',
+        searchForTrack: vi.fn().mockResolvedValue([fastCandidate]),
+        getStreamUrl: vi.fn(),
+      };
+      const hungProvider: StreamingProvider = {
+        id: 'hung',
+        kind: 'streaming',
+        name: 'Hung Provider',
+        searchForTrack: vi.fn().mockImplementation(() => new Promise(() => {})),
+        getStreamUrl: vi.fn(),
+      };
+
+      providersHost.register(fastProvider);
+      providersHost.register(hungProvider);
+
+      const track: Track = {
+        title: 'Sweet Dreams',
+        artists: [{ name: 'Eurythmics', roles: [] }],
+        source: { provider: 'spotify', id: 'sd-1' },
+      };
+
+      const candidates = await resolveAllProviderCandidates(track, 50);
+      expect(candidates).toEqual([fastCandidate]);
     });
   });
 });

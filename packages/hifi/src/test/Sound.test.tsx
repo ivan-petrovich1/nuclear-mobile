@@ -209,7 +209,9 @@ describe('Sound', () => {
     unmount();
 
     expect(pauseMock).toHaveBeenCalled();
-    expect(audio.muted).toBe(true);
+    // Teardown must leave `audio.muted === false` so Linux WirePlumber does not
+    // persist `mute: true` across track switches and silence `webaudio` sinks.
+    expect(audio.muted).toBe(false);
     expect(audio.getAttribute('src')).toBeNull();
     expect(audio.innerHTML).toBe('');
     expect(loadSpy).toHaveBeenCalled();

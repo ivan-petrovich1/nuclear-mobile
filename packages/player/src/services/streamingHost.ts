@@ -172,21 +172,42 @@ export const streamingHost = createStreamingHost();
  */
 export const resolveAllProviderCandidates = async (
   track: Track,
+  timeoutMs = 8_000,
 ): Promise<StreamCandidate[]> => {
   const providers = providersHost.list('streaming') as StreamingProvider[];
   if (providers.length === 0) {
     return [];
   }
 
+  const withTimeout = <T>(
+    promise: Promise<T>,
+    providerId: string,
+  ): Promise<T> => {
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timerId = setTimeout(() => {
+        reject(
+          new Error(`Provider ${providerId} timed out after ${timeoutMs}ms`),
+        );
+      }, timeoutMs);
+    });
+    return Promise.race([promise, timeout]).finally(() => {
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+      }
+    });
+  };
+
   const results = await Promise.allSettled(
     providers.map(async (provider) => {
-      const list = provider.searchForTrackV2
-        ? await provider.searchForTrackV2(track)
-        : await provider.searchForTrack(
+      const searchPromise = provider.searchForTrackV2
+        ? provider.searchForTrackV2(track)
+        : provider.searchForTrack(
             track.artists[0]?.name ?? 'Unknown Artist',
             track.title,
             track.album?.title,
           );
+      const list = await withTimeout(searchPromise, provider.id);
       return list.map((c) => ({
         ...c,
         source: c.source?.provider

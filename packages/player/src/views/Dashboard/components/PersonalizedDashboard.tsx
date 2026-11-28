@@ -1,10 +1,13 @@
 import { useNavigate } from '@tanstack/react-router';
 import {
   Bookmark,
+  ChevronLeft,
+  ChevronRight,
   Dices,
   Disc,
   Flame,
   Heart,
+  LayoutGrid,
   ListMusic,
   Loader2,
   Music2,
@@ -12,9 +15,19 @@ import {
   Plus,
   Radio,
   RefreshCw,
+  Sparkles,
   User,
 } from 'lucide-react';
-import { FC, useEffect, useMemo, useState } from 'react';
+import {
+  FC,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
 import { toast } from 'sonner';
 
 import {
@@ -26,8 +39,12 @@ import {
 
 import { haptic } from '../../../services/androidMediaBridge';
 import { spinForgottenGem } from '../../../services/endlessRadio';
-import { useMobileEnhancementsStore } from '../../../services/mobileEnhancements';
 import {
+  useMobileEnhancementsStore,
+  type DashboardShelfLayout,
+} from '../../../services/mobileEnhancements';
+import {
+  parseCustomSeeds,
   playOrSaveRecommendedMix,
   playRecommendedAlbum,
   playSimilarArtistMix,
@@ -79,6 +96,169 @@ type JumpBackItem = {
   coverUrl?: string;
 };
 
+const computeGridCols = (
+  width: number,
+  minCardWidth: number,
+  gap = 10,
+): number => {
+  if (!Number.isFinite(width) || width <= 0) {
+    return 5;
+  }
+  return Math.max(2, Math.floor((width + gap) / (minCardWidth + gap)));
+};
+
+type ShelfSectionProps<T> = {
+  shelfKey: string;
+  titleText: string;
+  avatarUrl?: string;
+  items: T[];
+  wide?: boolean;
+  layoutMode: DashboardShelfLayout;
+  containerWidth: number;
+  expanded: boolean;
+  onToggleExpand: (shelfKey: string) => void;
+  headerExtras?: ReactNode;
+  renderCard: (item: T, cardSizeClass: string) => ReactNode;
+};
+
+function ShelfSection<T>({
+  shelfKey,
+  titleText,
+  avatarUrl,
+  items,
+  wide = false,
+  layoutMode,
+  containerWidth,
+  expanded,
+  onToggleExpand,
+  headerExtras,
+  renderCard,
+}: ShelfSectionProps<T>) {
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
+
+  const updateArrows = useCallback(() => {
+    const row = rowRef.current;
+    if (!row) {
+      return;
+    }
+    setCanLeft(row.scrollLeft > 2);
+    setCanRight(row.scrollLeft + row.clientWidth < row.scrollWidth - 2);
+  }, []);
+
+  useEffect(() => {
+    if (layoutMode !== 'carousel') {
+      return;
+    }
+    updateArrows();
+    const row = rowRef.current;
+    if (!row || typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const ro = new ResizeObserver(updateArrows);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [layoutMode, items.length, containerWidth, updateArrows]);
+
+  const scrollStep = useCallback((dir: -1 | 1) => {
+    const row = rowRef.current;
+    if (!row) {
+      return;
+    }
+    const step = Math.max(240, Math.floor(row.clientWidth * 0.8));
+    row.scrollBy({ left: dir * step, behavior: 'smooth' });
+  }, []);
+
+  const minCardWidth = wide ? 164 : 150;
+  const rowLimit = computeGridCols(containerWidth, minCardWidth);
+  const canExpand = layoutMode === 'grid' && items.length > rowLimit;
+  const visibleItems =
+    canExpand && !expanded ? items.slice(0, rowLimit) : items;
+
+  const cardSizeClass =
+    layoutMode === 'carousel'
+      ? wide
+        ? 'w-[164px] shrink-0'
+        : 'w-[150px] shrink-0'
+      : 'w-full min-w-0';
+
+  return (
+    <section className="space-y-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {avatarUrl && (
+            <img
+              src={avatarUrl}
+              alt=""
+              className="size-6 shrink-0 rounded-full object-cover"
+            />
+          )}
+          <h3 className="truncate text-sm font-extrabold">{titleText}</h3>
+        </div>
+        {(headerExtras || canExpand || layoutMode === 'carousel') && (
+          <div className="flex items-center gap-2">
+            {headerExtras}
+            {canExpand && (
+              <button
+                type="button"
+                onClick={() => onToggleExpand(shelfKey)}
+                className="text-xs font-bold opacity-70 transition hover:opacity-100"
+              >
+                {expanded ? 'Show less' : `Show all (${items.length})`}
+              </button>
+            )}
+            {layoutMode === 'carousel' && (
+              <div className="inline-flex items-center gap-1">
+                <button
+                  type="button"
+                  title="Previous"
+                  aria-label={`Scroll ${titleText} left`}
+                  disabled={!canLeft}
+                  onClick={() => scrollStep(-1)}
+                  className="border-border bg-background/70 hover:bg-muted inline-flex size-7 items-center justify-center rounded-full border transition active:scale-95 disabled:cursor-default disabled:opacity-35"
+                >
+                  <ChevronLeft size={15} />
+                </button>
+                <button
+                  type="button"
+                  title="Next"
+                  aria-label={`Scroll ${titleText} right`}
+                  disabled={!canRight}
+                  onClick={() => scrollStep(1)}
+                  className="border-border bg-background/70 hover:bg-muted inline-flex size-7 items-center justify-center rounded-full border transition active:scale-95 disabled:cursor-default disabled:opacity-35"
+                >
+                  <ChevronRight size={15} />
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {layoutMode === 'carousel' ? (
+        <div
+          ref={rowRef}
+          onScroll={updateArrows}
+          className="flex gap-2.5 overflow-x-auto [scroll-behavior:smooth] pb-0.5 [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          {items.map((item) => renderCard(item, cardSizeClass))}
+        </div>
+      ) : (
+        <div
+          className="grid w-full gap-2.5"
+          style={{
+            gridTemplateColumns: `repeat(auto-fill, minmax(${minCardWidth}px, 1fr))`,
+          }}
+        >
+          {visibleItems.map((item) => renderCard(item, cardSizeClass))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export const PersonalizedDashboard: FC = () => {
   const navigate = useNavigate();
   const {
@@ -107,12 +287,66 @@ export const PersonalizedDashboard: FC = () => {
   const setEndlessRadioEnabled = useMobileEnhancementsStore(
     (s) => s.setEndlessRadioEnabled,
   );
+  const shelfLayout = useMobileEnhancementsStore((s) => s.dashboardShelfLayout);
+  const setShelfLayout = useMobileEnhancementsStore(
+    (s) => s.setDashboardShelfLayout,
+  );
+  const customSeedArtists = useMobileEnhancementsStore(
+    (s) => s.customSeedArtists,
+  );
+  const setCustomSeedArtists = useMobileEnhancementsStore(
+    (s) => s.setCustomSeedArtists,
+  );
 
   const feed = usePersonalizedFeedStore((s) => s.feed);
   const feedLoading = usePersonalizedFeedStore((s) => s.loading);
   const refreshFeed = usePersonalizedFeedStore((s) => s.refreshFeed);
   const [historyTopTracks, setHistoryTopTracks] = useState<JumpBackItem[]>([]);
   const [playingArtistId, setPlayingArtistId] = useState<string | null>(null);
+  const [expandedShelves, setExpandedShelves] = useState<
+    Record<string, boolean>
+  >({});
+  const [seedInput, setSeedInput] = useState('');
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  const toggleShelfExpanded = useCallback((shelfKey: string) => {
+    setExpandedShelves((prev) => ({
+      ...prev,
+      [shelfKey]: !prev[shelfKey],
+    }));
+  }, []);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) {
+      return;
+    }
+    const updateWidth = (next: number) => {
+      if (next <= 0) {
+        return;
+      }
+      setContainerWidth((prev) => {
+        if (
+          prev === 0 ||
+          computeGridCols(prev, 150) !== computeGridCols(next, 150) ||
+          computeGridCols(prev, 164) !== computeGridCols(next, 164)
+        ) {
+          return next;
+        }
+        return prev;
+      });
+    };
+    updateWidth(node.clientWidth);
+    if (typeof ResizeObserver === 'undefined') {
+      return;
+    }
+    const ro = new ResizeObserver((entries) => {
+      updateWidth(entries[0]?.contentRect.width ?? node.clientWidth);
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     if (!playlistsLoaded) {
@@ -191,13 +425,34 @@ export const PersonalizedDashboard: FC = () => {
     [playlistIndex],
   );
 
+  const parsedCustomSeeds = useMemo(
+    () => parseCustomSeeds(customSeedArtists),
+    [customSeedArtists],
+  );
+
   const hasSeeds =
+    parsedCustomSeeds.length > 0 ||
     topArtists.length > 0 ||
     favoriteTracks.length > 0 ||
     favoriteArtists.length > 0 ||
     playlists.length > 0 ||
     historyTopTracks.length > 0 ||
     Boolean(feed && feed.seedArtists.length > 0);
+
+  const handleSeedSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const added = parseCustomSeeds(seedInput);
+    if (added.length === 0) {
+      return;
+    }
+    const merged = Array.from(new Set([...parsedCustomSeeds, ...added])).join(
+      ', ',
+    );
+    setCustomSeedArtists(merged);
+    setSeedInput('');
+    toast.success(`Added seed artists: ${added.join(', ')}`);
+    void refreshFeed(true);
+  };
 
   const currentHour =
     import.meta.env.MODE === 'test' ? 20 : new Date().getHours();
@@ -306,7 +561,7 @@ export const PersonalizedDashboard: FC = () => {
   };
 
   return (
-    <div className="mb-6 space-y-5">
+    <div ref={containerRef} className="mb-6 space-y-5">
       {/* Personalized Greeting + Vibe Banner */}
       <div
         className="border-border rounded-2xl border p-4 shadow-sm"
@@ -387,6 +642,26 @@ export const PersonalizedDashboard: FC = () => {
               Refresh Feed
             </button>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              haptic('light');
+              const next = shelfLayout === 'grid' ? 'carousel' : 'grid';
+              setShelfLayout(next);
+            }}
+            title="Switch between Responsive Grid (Show all) and Arrow Carousel"
+            className="border-border bg-background/70 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 transition active:scale-95"
+          >
+            {shelfLayout === 'grid' ? (
+              <>
+                <LayoutGrid size={13} /> Shelf: Grid
+              </>
+            ) : (
+              <>
+                <ChevronRight size={13} /> Shelf: Arrows
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -407,10 +682,28 @@ export const PersonalizedDashboard: FC = () => {
               Start listening to build your feed
             </h3>
             <p className="max-w-md text-xs opacity-70">
-              Play a few songs, favorite tracks, or import a playlist.
-              Everything on this page updates to match what you listen to.
+              Play a few songs, favorite tracks, import a playlist, or enter
+              favorite artists below to build your feed right away.
             </p>
           </div>
+          <form
+            onSubmit={handleSeedSubmit}
+            className="mt-1 flex w-full max-w-md flex-wrap justify-center gap-2"
+          >
+            <input
+              type="text"
+              value={seedInput}
+              onChange={(e) => setSeedInput(e.target.value)}
+              placeholder="Enter artists (e.g. Duster, Current Joys, Kino)"
+              className="border-border bg-background/70 min-w-[210px] flex-1 rounded-full border px-3 py-1.5 text-xs outline-none"
+            />
+            <button
+              type="submit"
+              className="bg-primary text-primary-foreground inline-flex items-center gap-1 rounded-full px-3.5 py-1.5 text-xs font-bold shadow transition active:scale-95"
+            >
+              <Sparkles size={13} /> Build Feed
+            </button>
+          </form>
           <div className="mt-1 flex flex-wrap justify-center gap-2 text-xs font-bold">
             <button
               data-testid="personalized-empty-search"
@@ -537,20 +830,17 @@ export const PersonalizedDashboard: FC = () => {
       {/* "Because You Listen to <Artist>" Shelves */}
       {feed &&
         feed.artistShelves.map((shelf) => (
-          <section key={shelf.seedArtist} className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                {shelf.seedImageUrl && (
-                  <img
-                    src={shelf.seedImageUrl}
-                    alt=""
-                    className="size-6 rounded-full object-cover"
-                  />
-                )}
-                <h3 className="text-sm font-extrabold">
-                  Because You Listen to {shelf.seedArtist}
-                </h3>
-              </div>
+          <ShelfSection
+            key={shelf.seedArtist}
+            shelfKey={`shelf:${shelf.seedArtist}`}
+            titleText={`Because You Listen to ${shelf.seedArtist}`}
+            avatarUrl={shelf.seedImageUrl}
+            items={shelf.tracks}
+            layoutMode={shelfLayout}
+            containerWidth={containerWidth}
+            expanded={Boolean(expandedShelves[`shelf:${shelf.seedArtist}`])}
+            onToggleExpand={toggleShelfExpanded}
+            headerExtras={
               <button
                 onClick={() =>
                   playTrackList(shelf.tracks, `${shelf.seedArtist} Radio`)
@@ -559,104 +849,66 @@ export const PersonalizedDashboard: FC = () => {
               >
                 <Play size={11} fill="currentColor" /> Play Radio
               </button>
-            </div>
+            }
+            renderCard={(track, cardSizeClass) => {
+              const coverUrl =
+                pickArtwork(track.artwork, 'thumbnail', 180)?.url ??
+                pickArtwork(track.album?.artwork, 'thumbnail', 180)?.url;
+              const artistLabel =
+                track.artists?.map((a) => a.name).join(', ') || '';
 
-            <div className="flex gap-2.5 overflow-x-auto pb-1">
-              {shelf.tracks.map((track) => {
-                const coverUrl =
-                  pickArtwork(track.artwork, 'thumbnail', 180)?.url ??
-                  pickArtwork(track.album?.artwork, 'thumbnail', 180)?.url;
-                const artistLabel =
-                  track.artists?.map((a) => a.name).join(', ') || '';
-
-                return (
-                  <button
-                    key={`${shelf.seedArtist}-${track.source.id}`}
-                    onClick={() => playTrackNow(track)}
-                    className="border-border bg-muted/70 flex w-36 shrink-0 flex-col gap-1.5 rounded-xl border p-2.5 text-left transition active:scale-95"
-                  >
-                    <div className="bg-background relative aspect-square w-full overflow-hidden rounded-lg">
-                      {coverUrl ? (
-                        <img
-                          src={coverUrl}
-                          alt=""
-                          className="size-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex size-full items-center justify-center opacity-40">
-                          <Music2 size={26} />
-                        </div>
-                      )}
-                      <div className="absolute right-1.5 bottom-1.5 flex size-7 items-center justify-center rounded-full bg-black/70 text-white">
-                        <Play size={12} fill="currentColor" />
-                      </div>
-                    </div>
-                    <div className="truncate text-xs font-bold">
-                      {track.title}
-                    </div>
-                    <div className="truncate text-[10px] opacity-70">
-                      {artistLabel}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        ))}
-
-      {/* Similar Artists */}
-      {feed && feed.similarArtists.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-sm font-extrabold">Similar Artists</h3>
-          <div className="flex gap-2.5 overflow-x-auto pb-1">
-            {feed.similarArtists.map((artist) => (
-              <div
-                key={artist.id}
-                className="border-border bg-muted/70 flex w-36 shrink-0 flex-col gap-1.5 rounded-xl border p-2.5 text-left"
-              >
-                <div className="relative aspect-square w-full">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      haptic('light');
-                      void navigate({
-                        to: '/search',
-                        search: { q: artist.name },
-                      });
-                    }}
-                    className="bg-background block size-full cursor-pointer overflow-hidden rounded-full"
-                    aria-label={`Search ${artist.name}`}
-                  >
-                    {artist.imageUrl ? (
+              return (
+                <button
+                  key={`${shelf.seedArtist}-${track.source.id}`}
+                  onClick={() => playTrackNow(track)}
+                  className={`border-border bg-muted/70 flex flex-col gap-1.5 rounded-xl border p-2.5 text-left transition active:scale-95 ${cardSizeClass}`}
+                >
+                  <div className="bg-background relative aspect-square w-full overflow-hidden rounded-lg">
+                    {coverUrl ? (
                       <img
-                        src={artist.imageUrl}
-                        alt={artist.name}
+                        src={coverUrl}
+                        alt=""
                         className="size-full object-cover"
                       />
                     ) : (
                       <div className="flex size-full items-center justify-center opacity-40">
-                        <User size={28} />
+                        <Music2 size={26} />
                       </div>
                     )}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={playingArtistId === artist.id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void handlePlaySimilarArtist(artist);
-                    }}
-                    aria-label={`Play ${artist.name}`}
-                    className="bg-primary text-primary-foreground ring-background/70 absolute right-0.5 bottom-0.5 z-10 flex size-8 cursor-pointer items-center justify-center rounded-full shadow-md ring-2 transition hover:scale-105 active:scale-90 disabled:opacity-70"
-                  >
-                    {playingArtistId === artist.id ? (
-                      <Loader2 size={13} className="animate-spin" />
-                    ) : (
-                      <Play size={13} fill="currentColor" />
-                    )}
-                  </button>
-                </div>
+                    <div className="absolute right-1.5 bottom-1.5 flex size-7 items-center justify-center rounded-full bg-black/70 text-white">
+                      <Play size={12} fill="currentColor" />
+                    </div>
+                  </div>
+                  <div className="truncate text-xs font-bold">
+                    {track.title}
+                  </div>
+                  <div className="truncate text-[10px] opacity-70">
+                    {artistLabel}
+                  </div>
+                </button>
+              );
+            }}
+          />
+        ))}
+
+      {/* Similar Artists */}
+      {feed && feed.similarArtists.length > 0 && (
+        <ShelfSection
+          shelfKey="similar-artists"
+          titleText="Similar Artists"
+          items={feed.similarArtists}
+          layoutMode={shelfLayout}
+          containerWidth={containerWidth}
+          expanded={Boolean(expandedShelves['similar-artists'])}
+          onToggleExpand={toggleShelfExpanded}
+          renderCard={(artist, cardSizeClass) => (
+            <div
+              key={artist.id}
+              className={`border-border bg-muted/70 flex flex-col gap-1.5 rounded-xl border p-2.5 text-left ${cardSizeClass}`}
+            >
+              <div className="relative aspect-square w-full">
                 <button
+                  type="button"
                   onClick={() => {
                     haptic('light');
                     void navigate({
@@ -664,114 +916,158 @@ export const PersonalizedDashboard: FC = () => {
                       search: { q: artist.name },
                     });
                   }}
-                  className="text-left"
+                  className="bg-background block size-full cursor-pointer overflow-hidden rounded-full"
+                  aria-label={`Search ${artist.name}`}
                 >
-                  <div className="truncate text-xs font-bold">
-                    {artist.name}
-                  </div>
-                  <div className="truncate text-[10px] opacity-65">
-                    {artist.reason}
-                  </div>
+                  {artist.imageUrl ? (
+                    <img
+                      src={artist.imageUrl}
+                      alt={artist.name}
+                      className="size-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex size-full items-center justify-center opacity-40">
+                      <User size={28} />
+                    </div>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  disabled={playingArtistId === artist.id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handlePlaySimilarArtist(artist);
+                  }}
+                  aria-label={`Play ${artist.name}`}
+                  className="bg-primary text-primary-foreground ring-background/70 absolute right-0.5 bottom-0.5 z-10 flex size-8 cursor-pointer items-center justify-center rounded-full shadow-md ring-2 transition hover:scale-105 active:scale-90 disabled:opacity-70"
+                >
+                  {playingArtistId === artist.id ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <Play size={13} fill="currentColor" />
+                  )}
                 </button>
               </div>
-            ))}
-          </div>
-        </section>
+              <button
+                onClick={() => {
+                  haptic('light');
+                  void navigate({
+                    to: '/search',
+                    search: { q: artist.name },
+                  });
+                }}
+                className="text-left"
+              >
+                <div className="truncate text-xs font-bold">{artist.name}</div>
+                <div className="truncate text-[10px] opacity-65">
+                  {artist.reason}
+                </div>
+              </button>
+            </div>
+          )}
+        />
       )}
 
       {/* Albums & Releases from Your Artists */}
       {feed && feed.albums.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-sm font-extrabold">Albums & Releases</h3>
-          <div className="flex gap-2.5 overflow-x-auto pb-1">
-            {feed.albums.map((album) => {
-              const releaseYear = album.releaseDate?.slice(0, 4);
-              return (
-                <button
-                  key={`${album.id}-${album.title}`}
-                  onClick={() => void handleOpenAlbum(album)}
-                  className="border-border bg-muted/70 flex w-36 shrink-0 flex-col gap-1.5 rounded-xl border p-2.5 text-left transition active:scale-95"
-                >
-                  <div className="bg-background relative aspect-square w-full overflow-hidden rounded-lg">
-                    {album.coverUrl ? (
-                      <img
-                        src={album.coverUrl}
-                        alt=""
-                        className="size-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex size-full items-center justify-center opacity-40">
-                        <Disc size={28} />
-                      </div>
-                    )}
-                    {releaseYear && (
-                      <span className="absolute top-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white">
-                        {releaseYear}
-                      </span>
-                    )}
-                  </div>
-                  <div className="truncate text-xs font-bold">
-                    {album.title}
-                  </div>
-                  <div className="truncate text-[10px] opacity-70">
-                    {album.artistName}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* Mixes For You */}
-      {feed && feed.mixes.length > 0 && (
-        <section className="space-y-2">
-          <h3 className="text-sm font-extrabold">Mixes for You</h3>
-          <div className="flex gap-2.5 overflow-x-auto pb-1">
-            {feed.mixes.map((mix) => (
-              <div
-                key={mix.id}
-                className="border-border bg-muted/70 flex w-40 shrink-0 flex-col gap-2 rounded-xl border p-2.5 text-left"
+        <ShelfSection
+          shelfKey="albums"
+          titleText="Albums & Releases"
+          items={feed.albums}
+          layoutMode={shelfLayout}
+          containerWidth={containerWidth}
+          expanded={Boolean(expandedShelves['albums'])}
+          onToggleExpand={toggleShelfExpanded}
+          renderCard={(album, cardSizeClass) => {
+            const releaseYear = album.releaseDate?.slice(0, 4);
+            return (
+              <button
+                key={`${album.id}-${album.title}`}
+                onClick={() => void handleOpenAlbum(album)}
+                className={`border-border bg-muted/70 flex flex-col gap-1.5 rounded-xl border p-2.5 text-left transition active:scale-95 ${cardSizeClass}`}
               >
-                <div className="bg-background aspect-square w-full overflow-hidden rounded-lg">
-                  {mix.pictureUrl ? (
+                <div className="bg-background relative aspect-square w-full overflow-hidden rounded-lg">
+                  {album.coverUrl ? (
                     <img
-                      src={mix.pictureUrl}
+                      src={album.coverUrl}
                       alt=""
                       className="size-full object-cover"
                     />
                   ) : (
                     <div className="flex size-full items-center justify-center opacity-40">
-                      <ListMusic size={28} />
+                      <Disc size={28} />
                     </div>
                   )}
+                  {releaseYear && (
+                    <span className="absolute top-1.5 left-1.5 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[9px] font-bold text-white">
+                      {releaseYear}
+                    </span>
+                  )}
                 </div>
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-bold">{mix.title}</div>
-                  <div className="text-[10px] opacity-65">
-                    {mix.trackCount} tracks • {mix.seedArtist}
+                <div className="truncate text-xs font-bold">{album.title}</div>
+                <div className="truncate text-[10px] opacity-70">
+                  {album.artistName}
+                </div>
+              </button>
+            );
+          }}
+        />
+      )}
+
+      {/* Mixes For You */}
+      {feed && feed.mixes.length > 0 && (
+        <ShelfSection
+          shelfKey="mixes"
+          titleText="Mixes for You"
+          items={feed.mixes}
+          wide
+          layoutMode={shelfLayout}
+          containerWidth={containerWidth}
+          expanded={Boolean(expandedShelves['mixes'])}
+          onToggleExpand={toggleShelfExpanded}
+          renderCard={(mix, cardSizeClass) => (
+            <div
+              key={mix.id}
+              className={`border-border bg-muted/70 flex flex-col gap-2 rounded-xl border p-2.5 text-left ${cardSizeClass}`}
+            >
+              <div className="bg-background aspect-square w-full overflow-hidden rounded-lg">
+                {mix.pictureUrl ? (
+                  <img
+                    src={mix.pictureUrl}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <div className="flex size-full items-center justify-center opacity-40">
+                    <ListMusic size={28} />
                   </div>
-                </div>
-                <div className="mt-auto flex items-center gap-1.5 text-[11px] font-bold">
-                  <button
-                    onClick={() => void handleMixAction(mix, 'play')}
-                    className="bg-primary text-primary-foreground inline-flex flex-1 items-center justify-center gap-1 rounded-lg py-1 transition active:scale-95"
-                  >
-                    <Play size={11} fill="currentColor" /> Play
-                  </button>
-                  <button
-                    onClick={() => void handleMixAction(mix, 'save')}
-                    aria-label={`Save ${mix.title}`}
-                    title="Save to Playlists"
-                    className="border-border bg-background/70 inline-flex items-center justify-center rounded-lg border px-2 py-1 transition active:scale-95"
-                  >
-                    <Bookmark size={12} />
-                  </button>
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-xs font-bold">{mix.title}</div>
+                <div className="text-[10px] opacity-65">
+                  {mix.trackCount} tracks • {mix.seedArtist}
                 </div>
               </div>
-            ))}
-          </div>
-        </section>
+              <div className="mt-auto flex items-center gap-1.5 text-[11px] font-bold">
+                <button
+                  onClick={() => void handleMixAction(mix, 'play')}
+                  className="bg-primary text-primary-foreground inline-flex flex-1 items-center justify-center gap-1 rounded-lg py-1 transition active:scale-95"
+                >
+                  <Play size={11} fill="currentColor" /> Play
+                </button>
+                <button
+                  onClick={() => void handleMixAction(mix, 'save')}
+                  aria-label={`Save ${mix.title}`}
+                  title="Save to Playlists"
+                  className="border-border bg-background/70 inline-flex items-center justify-center rounded-lg border px-2 py-1 transition active:scale-95"
+                >
+                  <Bookmark size={12} />
+                </button>
+              </div>
+            </div>
+          )}
+        />
       )}
 
       {/* Jump Back In — Most Played Tracks */}
@@ -815,48 +1111,52 @@ export const PersonalizedDashboard: FC = () => {
 
       {/* Your Playlists Quick Shelf */}
       {playlists.length > 0 && (
-        <section className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-extrabold">Your Playlists</h3>
+        <ShelfSection
+          shelfKey="your-playlists"
+          titleText="Your Playlists"
+          items={playlists}
+          layoutMode={shelfLayout}
+          containerWidth={containerWidth}
+          expanded={Boolean(expandedShelves['your-playlists'])}
+          onToggleExpand={toggleShelfExpanded}
+          headerExtras={
             <button
               onClick={() => void navigate({ to: '/playlists' })}
               className="text-xs font-bold opacity-70 hover:opacity-100"
             >
               See all →
             </button>
-          </div>
-          <div className="flex gap-2.5 overflow-x-auto pb-1">
-            {playlists.map((pl) => (
-              <button
-                key={pl.id}
-                onClick={() => {
-                  haptic('light');
-                  void navigate({
-                    to: '/playlists/$playlistId',
-                    params: { playlistId: pl.id },
-                  });
-                }}
-                className="border-border bg-muted/70 flex w-36 shrink-0 flex-col gap-1.5 rounded-xl border p-2.5 text-left transition active:scale-95"
-              >
-                <div className="bg-background flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg">
-                  {pl.thumbnails?.[0] ? (
-                    <img
-                      src={pl.thumbnails[0]}
-                      alt=""
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    <ListMusic size={28} className="opacity-40" />
-                  )}
-                </div>
-                <div className="truncate text-xs font-bold">{pl.name}</div>
-                <div className="text-[10px] opacity-65">
-                  {pl.itemCount} track{pl.itemCount === 1 ? '' : 's'}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
+          }
+          renderCard={(pl, cardSizeClass) => (
+            <button
+              key={pl.id}
+              onClick={() => {
+                haptic('light');
+                void navigate({
+                  to: '/playlists/$playlistId',
+                  params: { playlistId: pl.id },
+                });
+              }}
+              className={`border-border bg-muted/70 flex flex-col gap-1.5 rounded-xl border p-2.5 text-left transition active:scale-95 ${cardSizeClass}`}
+            >
+              <div className="bg-background flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg">
+                {pl.thumbnails?.[0] ? (
+                  <img
+                    src={pl.thumbnails[0]}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <ListMusic size={28} className="opacity-40" />
+                )}
+              </div>
+              <div className="truncate text-xs font-bold">{pl.name}</div>
+              <div className="text-[10px] opacity-65">
+                {pl.itemCount} track{pl.itemCount === 1 ? '' : 's'}
+              </div>
+            </button>
+          )}
+        />
       )}
 
       {/* For Fans Of (Your Top Artists) */}

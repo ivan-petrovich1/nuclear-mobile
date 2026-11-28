@@ -1,5 +1,16 @@
 [
   {
+    "date": "2026-11-28T14:30",
+    "description": "v1.1.2 - Fixed Linux PipeWire/WirePlumber silent playback with moving timer on track switches (removed audio.muted=true on <Sound> teardown, added state.restore-props=false to PULSE_PROP while keeping sink routing, remounted <Sound key={src.url}> and cleanly disconnected Web Audio DSP graphs per track); added Offline Download active card in Switch Audio Stream and 8s per-provider stream search timeout; added Dashboard Grid/Carousel shelf toggle, custom seed artists, and improved multi-seed personalized discovery.",
+    "type": "fix",
+    "author": "ivan",
+    "contributors": ["ivan"],
+    "tags": [
+      { "label": "v1.1.2", "color": "purple" },
+      { "label": "All Ports", "color": "green" }
+    ]
+  },
+  {
     "date": "2026-11-27T17:30",
     "description": "v1.1.1 - Added smooth scrolling MarqueeText titles for overflowing track names across Player Bar, Nuclear Jam, and Now Playing views; added full Spotify public playlist pagination beyond 100 tracks; fixed full-screen Now Playing background turning transparent on track switch; fixed silent playback and timer-moving-in-silence bugs (avoiding Dolby ec-3/ac-3 and 5.1 surround streams, preserving Piped WebM/Opus metadata, catching unsupported MSE codecs, unlocking Web Audio DSP AudioContext, and preventing playback with empty or failed streams).",
     "type": "fix",

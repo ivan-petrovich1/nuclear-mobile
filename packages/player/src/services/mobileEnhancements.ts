@@ -53,6 +53,7 @@ export const getActiveLyricLine = (
 
 export type NowPlayingTab = 'player' | 'lyrics' | 'dsp' | 'queue';
 export type DesktopHubTab = 'spotify' | 'offline' | 'wrapped' | 'p2p' | 'dsp';
+export type DashboardShelfLayout = 'grid' | 'carousel';
 
 export const EQ_FREQUENCIES = [60, 230, 910, 3600, 14000] as const;
 export const EQ_LABELS = ['60Hz', '230Hz', '910Hz', '3.6kHz', '14kHz'] as const;
@@ -115,6 +116,8 @@ type MobileEnhancementsState = {
   crossfadeSeconds: number;
   silenceTrimEnabled: boolean;
   endlessRadioEnabled: boolean;
+  dashboardShelfLayout: DashboardShelfLayout;
+  customSeedArtists: string;
 
   setNowPlayingOpen: (open: boolean) => void;
   setNowPlayingTab: (tab: NowPlayingTab) => void;
@@ -150,6 +153,8 @@ type MobileEnhancementsState = {
   setCrossfadeSeconds: (sec: number) => void;
   setSilenceTrimEnabled: (enabled: boolean) => void;
   setEndlessRadioEnabled: (enabled: boolean) => void;
+  setDashboardShelfLayout: (layout: DashboardShelfLayout) => void;
+  setCustomSeedArtists: (seeds: string) => void;
 };
 
 export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
@@ -191,6 +196,8 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
       crossfadeSeconds: 0,
       silenceTrimEnabled: false,
       endlessRadioEnabled: false,
+      dashboardShelfLayout: 'grid',
+      customSeedArtists: '',
 
       setNowPlayingOpen: (nowPlayingOpen) => set({ nowPlayingOpen }),
       setNowPlayingTab: (nowPlayingTab) => set({ nowPlayingTab }),
@@ -297,6 +304,9 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
         set({ silenceTrimEnabled }),
       setEndlessRadioEnabled: (endlessRadioEnabled) =>
         set({ endlessRadioEnabled }),
+      setDashboardShelfLayout: (dashboardShelfLayout) =>
+        set({ dashboardShelfLayout }),
+      setCustomSeedArtists: (customSeedArtists) => set({ customSeedArtists }),
     }),
     {
       name: 'nuclear-mobile-enhancements',
@@ -327,6 +337,8 @@ export const useMobileEnhancementsStore = create<MobileEnhancementsState>()(
         crossfadeSeconds: state.crossfadeSeconds,
         silenceTrimEnabled: state.silenceTrimEnabled,
         endlessRadioEnabled: state.endlessRadioEnabled,
+        dashboardShelfLayout: state.dashboardShelfLayout,
+        customSeedArtists: state.customSeedArtists,
       }),
     },
   ),
@@ -610,7 +622,7 @@ const queryLrcLib = async (url: string): Promise<LrcLibResult[] | null> => {
     return null;
   }
   const resp = await httpHost.fetch(url, {
-    headers: { 'User-Agent': 'NuclearPlayer/1.0.9' },
+    headers: { 'User-Agent': 'NuclearPlayer/1.1.2' },
   });
   if (resp.status === 429 || resp.status >= 500) {
     const retryRaw =
@@ -860,6 +872,7 @@ const preResolveUpcomingTracks = async () => {
 // Web Audio DSP Graph attached to active <audio> element
 type DspGraph = {
   ctx: AudioContext;
+  source: MediaElementAudioSourceNode;
   bassFilter: BiquadFilterNode;
   eqFilters: BiquadFilterNode[];
   loudnessGain: GainNode;
@@ -883,7 +896,7 @@ export const getAudioAnalyser = (): AnalyserNode | null => activeAnalyser;
 const isAndroidDevice = () =>
   typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
-const disposeActiveDspGraph = () => {
+export const disposeActiveDspGraph = () => {
   if (!activeDspGraph) {
     activeDspAudio = null;
     activeAnalyser = null;
@@ -903,12 +916,17 @@ const disposeActiveDspGraph = () => {
   } catch {
     // ignore already-stopped oscillator
   }
+  try {
+    graph.source.disconnect();
+  } catch {
+    // ignore already-disconnected source node
+  }
   void graph.ctx.close().catch(() => {});
 };
 
-const syncAudioElementDsp = () => {
+export const syncAudioElementDsp = () => {
   const audio = document.querySelector('audio');
-  if (!audio) {
+  if (!audio || !audio.isConnected) {
     disposeActiveDspGraph();
     return;
   }
@@ -1068,6 +1086,7 @@ const syncAudioElementDsp = () => {
 
       graph = {
         ctx,
+        source,
         bassFilter,
         eqFilters,
         loudnessGain,
@@ -1348,9 +1367,19 @@ export const initMobileEnhancements = () => {
   let lastCrossfadeTrackId = '';
   let crossfadeModifiedVol = false;
   let lastSilenceSkipAt = 0;
+  let lastDspSrcUrl: string | null = useSoundStore.getState().src?.url ?? null;
 
   useSoundStore.subscribe((soundState) => {
-    syncAudioElementDsp();
+    const nextSrcUrl = soundState.src?.url ?? null;
+    if (!nextSrcUrl) {
+      lastDspSrcUrl = null;
+      disposeActiveDspGraph();
+    } else if (nextSrcUrl !== lastDspSrcUrl) {
+      lastDspSrcUrl = nextSrcUrl;
+      disposeActiveDspGraph();
+    } else {
+      syncAudioElementDsp();
+    }
 
     // If the resolved audio stream duration differs from metadata (e.g. album/video cut vs radio edit),
     // re-pick the closest-duration synced lyrics from the cached LRCLIB batch with zero network calls.

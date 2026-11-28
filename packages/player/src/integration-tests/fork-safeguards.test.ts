@@ -460,4 +460,17 @@ describe('Fork safeguards (protects custom features across upstream syncs)', () 
       expect(globalCss).toContain('nuclear-marquee-animate');
     });
   });
+
+  describe('Linux WebKitGTK / PipeWire WebAudio mute safeguards', () => {
+    it('does not mute <audio> during Sound teardown and disables WirePlumber prop restoration', () => {
+      const soundTsx = readRepoFile('packages/hifi/src/Sound.tsx');
+      expect(soundTsx).not.toMatch(/\baudio\.muted\s*=\s*true\b/);
+
+      const mainRs = readRepoFile('packages/player/src-tauri/src/main.rs');
+      expect(mainRs).toContain('state.restore-props=false');
+
+      const soundProvider = readPlayerFile('src/components/SoundProvider.tsx');
+      expect(soundProvider).toContain('key={src.url}');
+    });
+  });
 });

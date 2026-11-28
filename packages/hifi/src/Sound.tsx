@@ -12,7 +12,9 @@ import { SoundProps } from './types';
 const teardownAudioElement = (audio: HTMLAudioElement): void => {
   try {
     audio.pause();
-    audio.muted = true;
+    // Never mute the element during teardown: on Linux (WebKitGTK +
+    // PipeWire/WirePlumber), muting <audio> persists `mute: true` for
+    // `application.name="Nuclear"` and mutes the next track's `webaudio` sink.
     audio.srcObject = null;
     audio.removeAttribute('src');
     audio.replaceChildren();

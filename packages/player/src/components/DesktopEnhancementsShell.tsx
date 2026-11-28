@@ -1011,7 +1011,13 @@ export const DesktopEnhancementsShell: FC = () => {
                         onClick={() => setDesktopStreamPickerOpen(true)}
                         className="rounded-full border border-white/20 bg-black/35 px-3 py-0.5 text-white hover:bg-black/55"
                       >
-                        🔀 Switch Stream ({track.streamCandidates?.length ?? 0})
+                        🔀 Switch Stream (
+                        {isTrackDownloaded &&
+                        !isOfflineBypassed(currentItem.id) &&
+                        (track.streamCandidates?.length ?? 0) === 0
+                          ? 'Offline'
+                          : (track.streamCandidates?.length ?? 0)}
+                        )
                       </button>
                     )}
                     {isTrackDownloaded && (
@@ -1568,6 +1574,20 @@ export const DesktopEnhancementsShell: FC = () => {
             </div>
 
             <div className="flex-1 space-y-1.5 overflow-y-auto p-4">
+              {isTrackDownloaded && !isOfflineBypassed(currentItem.id) && (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-400/35 bg-emerald-500/20 px-3 py-2.5 text-left">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-bold text-emerald-200">
+                      ▶ Playing Offline Download (Local File)
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-emerald-100/80">
+                      Playing from local cache. Select an online stream below to
+                      switch.
+                    </div>
+                  </div>
+                  <Check size={16} className="shrink-0 text-emerald-300" />
+                </div>
+              )}
               {(track.streamCandidates ?? []).length === 0 ? (
                 <div className="rounded-xl border border-dashed p-6 text-center text-xs opacity-70">
                   {searchingAllStreams
